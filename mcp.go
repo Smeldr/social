@@ -33,7 +33,7 @@ func (m *postModule) MCPSchema() []forge.MCPField {
 			JSONName:    "credential_id",
 			Type:        "string",
 			Required:    true,
-			Description: "ID of the MastodonCredential to use for publishing.",
+			Description: "ID of the SocialCredential to use for publishing.",
 		},
 		{
 			Name:        "Body",
@@ -41,7 +41,15 @@ func (m *postModule) MCPSchema() []forge.MCPField {
 			Type:        "string",
 			Required:    true,
 			Format:      "markdown",
-			Description: "Post body text. Mastodon limit is 500 characters. Markdown is rendered as plain text.",
+			Description: "Post body text. Mastodon limit is 500 characters; LinkedIn limit is 3000. Markdown is rendered as plain text.",
+		},
+		{
+			Name:        "Platform",
+			JSONName:    "platform",
+			Type:        "string",
+			Required:    false,
+			Enum:        []string{"mastodon", "linkedin"},
+			Description: "Target publishing platform. Defaults to 'mastodon' when omitted.",
 		},
 		{
 			Name:        "MediaURL",
@@ -104,6 +112,7 @@ func (m *postModule) MCPGet(_ forge.Context, slug string) (any, error) {
 
 // MCPCreate creates a new ScheduledPost with status=draft.
 // If scheduled_at is provided, status is automatically set to "scheduled".
+// The platform field selects the publishing target (default: "mastodon").
 func (m *postModule) MCPCreate(_ forge.Context, fields map[string]any) (any, error) {
 	credentialID, _ := fields["credential_id"].(string)
 	if credentialID == "" {
@@ -114,10 +123,18 @@ func (m *postModule) MCPCreate(_ forge.Context, fields map[string]any) (any, err
 		return nil, forge.Err("body", "required")
 	}
 
+	platform := stringField(fields, "platform")
+	if platform == "" {
+		platform = "mastodon" // backward-compatible default
+	}
+	if platform != "mastodon" && platform != "linkedin" {
+		return nil, forge.Err("platform", "must be 'mastodon' or 'linkedin'")
+	}
+
 	now := time.Now().UTC()
 	p := ScheduledPost{
 		ID:           forge.NewID(),
-		Platform:     "mastodon",
+		Platform:     platform,
 		CredentialID: credentialID,
 		Body:         body,
 		MediaURL:     stringField(fields, "media_url"),
@@ -267,12 +284,12 @@ type credentialModule struct {
 }
 
 // MCPMeta returns the MCP registration metadata for PlatformCredential.
-// TypeName "MastodonCredential" produces tools named create_mastodon_credential,
-// list_mastodon_credentials, etc.
+// TypeName "SocialCredential" produces tools named create_social_credential,
+// list_social_credentials, etc.
 func (m *credentialModule) MCPMeta() forge.MCPMeta {
 	return forge.MCPMeta{
 		Prefix:     "/social/credentials",
-		TypeName:   "MastodonCredential",
+		TypeName:   "SocialCredential",
 		Operations: []forge.MCPOperation{forge.MCPRead, forge.MCPWrite},
 	}
 }
@@ -281,11 +298,19 @@ func (m *credentialModule) MCPMeta() forge.MCPMeta {
 func (m *credentialModule) MCPSchema() []forge.MCPField {
 	return []forge.MCPField{
 		{
+			Name:        "Platform",
+			JSONName:    "platform",
+			Type:        "string",
+			Required:    true,
+			Enum:        []string{"mastodon", "linkedin"},
+			Description: "Platform to connect: 'mastodon' or 'linkedin'.",
+		},
+		{
 			Name:        "InstanceURL",
 			JSONName:    "instance_url",
 			Type:        "string",
-			Required:    true,
-			Description: "Base URL of the Mastodon instance, e.g. https://mastodon.social. Must match the instance registered for this application.",
+			Required:    false,
+			Description: "Base URL of the Mastodon instance, e.g. https://mastodon.social. Required for platform='mastodon'. Ignored for LinkedIn.",
 		},
 	}
 }
@@ -319,28 +344,48 @@ func (m *credentialModule) MCPGet(_ forge.Context, slug string) (any, error) {
 	return nil, forge.ErrNotFound
 }
 
-// MCPCreate initiates the Mastodon OAuth 2.0 flow.
-// It generates an OAuth state token, stores it in the DB, and returns the
-// authorization URL that the user must visit in a browser.
+// MCPCreate initiates the platform OAuth 2.0 flow for the given platform
+// ("mastodon" or "linkedin"). It generates an OAuth state token, stores it
+// in the DB, and returns the authorization URL the user must visit.
 //
 // The actual credential is not created until the OAuth callback completes at
-// GET /oauth/mastodon/callback.
+// GET /oauth/{platform}/callback.
 func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (any, error) {
-	instanceURL, _ := fields["instance_url"].(string)
-	if instanceURL == "" {
-		return nil, forge.Err("instance_url", "required")
-	}
+	platform, _ := fields["platform"].(string)
+	switch platform {
+	case "mastodon":
+		if m.social.mastodon == nil {
+			return nil, forge.Err("platform", "Mastodon is not configured on this server")
+		}
+		instanceURL, _ := fields["instance_url"].(string)
+		if instanceURL == "" {
+			return nil, forge.Err("instance_url", "required for platform='mastodon'")
+		}
+		state := forge.NewID()
+		if err := insertOAuthState(m.social.creds.db, state, "mastodon"); err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"redirect_url": m.social.mastodon.authURL(state),
+			"message":      "Visit redirect_url in a browser to authorise Mastodon. The credential will be saved automatically after authorisation.",
+		}, nil
 
-	state := forge.NewID()
-	if err := insertOAuthState(m.social.creds.db, state, "mastodon"); err != nil {
-		return nil, err
-	}
+	case "linkedin":
+		if m.social.linkedin == nil {
+			return nil, forge.Err("platform", "LinkedIn is not configured on this server")
+		}
+		state := forge.NewID()
+		if err := insertOAuthState(m.social.creds.db, state, "linkedin"); err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"redirect_url": m.social.linkedin.authURL(state),
+			"message":      "Visit redirect_url in a browser to authorise LinkedIn. The credential will be saved automatically after authorisation.",
+		}, nil
 
-	authURL := m.social.mastodon.authURL(state)
-	return map[string]any{
-		"redirect_url": authURL,
-		"message":      "Visit redirect_url in a browser to authorise Mastodon. The credential will be saved automatically after authorisation.",
-	}, nil
+	default:
+		return nil, forge.Err("platform", "must be 'mastodon' or 'linkedin'")
+	}
 }
 
 // MCPUpdate is not supported for credentials — use MCPCreate to reconnect.

@@ -112,7 +112,7 @@ func (s *Social) handleMastodonCallback(w http.ResponseWriter, r *http.Request) 
 
 	_, err = s.creds.upsertCredentialByInstance(
 		"mastodon", instanceURL, name,
-		tr.AccessToken, tr.RefreshToken, expiresAt,
+		tr.AccessToken, tr.RefreshToken, "", expiresAt,
 	)
 	if err != nil {
 		http.Error(w, "failed to save credential", http.StatusInternalServerError)
@@ -128,5 +128,68 @@ func (s *Social) handleMastodonCallback(w http.ResponseWriter, r *http.Request) 
 	fmt.Fprintf(w, `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Connected</title></head>
 <body><p>Connected to Mastodon successfully. You can close this tab.</p></body>
+</html>`)
+}
+
+// handleLinkedInCallback processes the OAuth 2.0 callback from LinkedIn.
+// It validates the state, exchanges the code for an access token, fetches
+// the person URN, and persists the resulting PlatformCredential.
+func (s *Social) handleLinkedInCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+	oauthError := r.URL.Query().Get("error")
+
+	if oauthError != "" {
+		http.Error(w, "OAuth error: "+oauthError, http.StatusBadRequest)
+		return
+	}
+	if code == "" || state == "" {
+		http.Error(w, "missing code or state", http.StatusBadRequest)
+		return
+	}
+
+	platform, err := consumeOAuthState(s.creds.db, state)
+	if err != nil {
+		http.Error(w, "invalid or expired OAuth state", http.StatusBadRequest)
+		return
+	}
+	if platform != "linkedin" {
+		http.Error(w, "unexpected platform: "+platform, http.StatusBadRequest)
+		return
+	}
+
+	tr, err := s.linkedin.exchangeCode(r.Context(), code)
+	if err != nil {
+		http.Error(w, "token exchange failed: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	actorID, err := s.linkedin.fetchPersonURN(r.Context(), tr.AccessToken)
+	if err != nil {
+		http.Error(w, "failed to fetch LinkedIn person URN: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	name := linkedinDisplayName(actorID)
+	expiresAt := linkedinExpiresAt(tr.ExpiresIn)
+
+	_, err = s.creds.upsertCredentialByInstance(
+		"linkedin", linkedinInstanceURL, name,
+		tr.AccessToken, "", actorID, expiresAt,
+	)
+	if err != nil {
+		http.Error(w, "failed to save credential", http.StatusInternalServerError)
+		return
+	}
+
+	// Success response.
+	if s.linkedin.cfg.SuccessURL != "" {
+		http.Redirect(w, r, s.linkedin.cfg.SuccessURL, http.StatusFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Connected</title></head>
+<body><p>Connected to LinkedIn successfully. You can close this tab.</p></body>
 </html>`)
 }

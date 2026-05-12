@@ -1,5 +1,6 @@
 // Package forgesocial provides platform publishing for Forge applications.
-// It supports scheduling and publishing content to Mastodon via OAuth 2.0.
+// It supports scheduling and publishing content to Mastodon and LinkedIn
+// via OAuth 2.0.
 //
 // # Quick start
 //
@@ -12,6 +13,11 @@
 //	        ClientSecret: os.Getenv("MASTODON_CLIENT_SECRET"),
 //	        InstanceURL:  os.Getenv("MASTODON_INSTANCE_URL"),
 //	        RedirectURL:  cfg.BaseURL + "/oauth/mastodon/callback",
+//	    },
+//	    LinkedIn: forgesocial.LinkedInConfig{
+//	        ClientID:     os.Getenv("LINKEDIN_CLIENT_ID"),
+//	        ClientSecret: os.Getenv("LINKEDIN_CLIENT_SECRET"),
+//	        RedirectURL:  cfg.BaseURL + "/oauth/linkedin/callback",
 //	    },
 //	})
 //	social.Register(app)
@@ -38,6 +44,9 @@ type Config struct {
 	Secret []byte
 	// Mastodon holds the Mastodon OAuth 2.0 client credentials.
 	Mastodon MastodonConfig
+	// LinkedIn holds the LinkedIn OAuth 2.0 client credentials.
+	// Leave zero-valued to disable LinkedIn publishing.
+	LinkedIn LinkedInConfig
 }
 
 // Social manages platform publishing for a Forge application.
@@ -48,6 +57,7 @@ type Social struct {
 	cfg      Config
 	creds    *credentialStore
 	mastodon *mastodonClient
+	linkedin *linkedinClient
 	sched    *scheduler
 }
 
@@ -71,6 +81,9 @@ func New(db forge.DB, cfg Config) *Social {
 		creds:    cs,
 		mastodon: mc,
 	}
+	if cfg.LinkedIn.ClientID != "" {
+		s.linkedin = newLinkedinClient(cfg.LinkedIn)
+	}
 	s.sched = newScheduler(s)
 	return s
 }
@@ -81,10 +94,14 @@ func New(db forge.DB, cfg Config) *Social {
 // Routes registered:
 //
 //	GET /oauth/mastodon/callback — OAuth 2.0 callback from Mastodon
+//	GET /oauth/linkedin/callback — OAuth 2.0 callback from LinkedIn (when configured)
 //
 // Call [Social.Stop] in your shutdown handler to drain the scheduler.
 func (s *Social) Register(app *forge.App) {
 	app.Handle("GET /oauth/mastodon/callback", http.HandlerFunc(s.handleMastodonCallback))
+	if s.linkedin != nil {
+		app.Handle("GET /oauth/linkedin/callback", http.HandlerFunc(s.handleLinkedInCallback))
+	}
 	s.sched.start()
 }
 

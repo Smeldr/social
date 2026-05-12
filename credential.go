@@ -20,13 +20,17 @@ import (
 // AccessToken and RefreshToken are stored encrypted in the database and
 // are never exposed through MCP responses.
 type PlatformCredential struct {
-	ID          string     `json:"id"`
-	Platform    string     `json:"platform"`
-	Name        string     `json:"name"`
-	InstanceURL string     `json:"instance_url"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID          string `json:"id"`
+	Platform    string `json:"platform"`
+	Name        string `json:"name"`
+	InstanceURL string `json:"instance_url"`
+	// ActorID is the platform-specific author identifier used when publishing.
+	// For LinkedIn this is the person URN ("urn:li:person:{sub}").
+	// For Mastodon it is unused and stored as an empty string.
+	ActorID   string     `json:"actor_id,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 
 	// accessToken and refreshToken are decrypted values held in memory only.
 	// They are populated by getCredential/listCredentials when the caller
@@ -106,15 +110,16 @@ func (cs *credentialStore) upsertCredential(cred PlatformCredential) error {
 	now := time.Now().UTC()
 	_, err = cs.db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_credentials
-			(id, platform, name, instance_url, access_token, refresh_token, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(id, platform, name, instance_url, actor_id, access_token, refresh_token, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name=excluded.name,
+			actor_id=excluded.actor_id,
 			access_token=excluded.access_token,
 			refresh_token=excluded.refresh_token,
 			expires_at=excluded.expires_at,
 			updated_at=excluded.updated_at`,
-		cred.ID, cred.Platform, cred.Name, cred.InstanceURL,
+		cred.ID, cred.Platform, cred.Name, cred.InstanceURL, cred.ActorID,
 		encAccess, encRefresh, nullTime(cred.ExpiresAt),
 		now, now,
 	)
@@ -123,7 +128,9 @@ func (cs *credentialStore) upsertCredential(cred PlatformCredential) error {
 
 // upsertCredentialByInstance updates an existing credential row matching
 // (platform, instance_url), or inserts a new row. Returns the credential ID.
-func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, name, accessToken, refreshToken string, expiresAt *time.Time) (string, error) {
+// actorID is the platform-specific author identifier (e.g. LinkedIn person URN);
+// pass an empty string for platforms that do not use it (Mastodon).
+func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, name, accessToken, refreshToken, actorID string, expiresAt *time.Time) (string, error) {
 	encAccess, err := cs.encryptToken(accessToken)
 	if err != nil {
 		return "", fmt.Errorf("forgesocial: encrypt access token: %w", err)
@@ -149,9 +156,9 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 		// Update existing credential.
 		_, err = cs.db.ExecContext(context.Background(), `
 			UPDATE forge_social_credentials
-			SET name=?, access_token=?, refresh_token=?, expires_at=?, updated_at=?
+			SET name=?, actor_id=?, access_token=?, refresh_token=?, expires_at=?, updated_at=?
 			WHERE id=?`,
-			name, encAccess, encRefresh, nullTime(expiresAt), now, existingID,
+			name, actorID, encAccess, encRefresh, nullTime(expiresAt), now, existingID,
 		)
 		return existingID, err
 	}
@@ -160,9 +167,9 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 	id := forge.NewID()
 	_, err = cs.db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_credentials
-			(id, platform, name, instance_url, access_token, refresh_token, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, platform, name, instanceURL,
+			(id, platform, name, instance_url, actor_id, access_token, refresh_token, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, platform, name, instanceURL, actorID,
 		encAccess, encRefresh, nullTime(expiresAt),
 		now, now,
 	)
@@ -176,11 +183,11 @@ func (cs *credentialStore) getCredential(id string) (PlatformCredential, error) 
 	var encAccess, encRefresh string
 	var expiresAt sql.NullTime
 	err := cs.db.QueryRowContext(context.Background(), `
-		SELECT id, platform, name, instance_url, access_token, refresh_token,
+		SELECT id, platform, name, instance_url, actor_id, access_token, refresh_token,
 		       expires_at, created_at, updated_at
 		FROM forge_social_credentials WHERE id=?`, id,
 	).Scan(
-		&c.ID, &c.Platform, &c.Name, &c.InstanceURL,
+		&c.ID, &c.Platform, &c.Name, &c.InstanceURL, &c.ActorID,
 		&encAccess, &encRefresh,
 		&expiresAt, &c.CreatedAt, &c.UpdatedAt,
 	)
@@ -210,7 +217,7 @@ func (cs *credentialStore) getCredential(id string) (PlatformCredential, error) 
 // must call getCredential by ID.
 func (cs *credentialStore) listCredentials() ([]PlatformCredential, error) {
 	rows, err := cs.db.QueryContext(context.Background(), `
-		SELECT id, platform, name, instance_url, expires_at, created_at, updated_at
+		SELECT id, platform, name, instance_url, actor_id, expires_at, created_at, updated_at
 		FROM forge_social_credentials
 		ORDER BY created_at ASC`)
 	if err != nil {
@@ -223,7 +230,7 @@ func (cs *credentialStore) listCredentials() ([]PlatformCredential, error) {
 		var c PlatformCredential
 		var expiresAt sql.NullTime
 		if err := rows.Scan(
-			&c.ID, &c.Platform, &c.Name, &c.InstanceURL,
+			&c.ID, &c.Platform, &c.Name, &c.InstanceURL, &c.ActorID,
 			&expiresAt, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, err

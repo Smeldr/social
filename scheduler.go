@@ -121,7 +121,7 @@ func (sc *scheduler) publishWithRetry(ctx context.Context, p ScheduledPost) {
 		return
 	}
 
-	platformID, publishErr := s.mastodon.publish(ctx, p, cred)
+	platformID, publishErr := s.callPlatformPublish(ctx, p, cred)
 
 	if publishErr == nil {
 		// Success.
@@ -171,17 +171,33 @@ func (sc *scheduler) publishWithRetry(ctx context.Context, p ScheduledPost) {
 }
 
 // publishNow publishes post p immediately, bypassing the scheduler.
-// It fetches the credential, calls the Mastodon API, and updates the post status.
-// Used by MCPPublish.
+// It fetches the credential, dispatches to the correct platform client,
+// and updates the post status. Used by MCPPublish.
 func (s *Social) publishNow(ctx context.Context, p ScheduledPost) error {
 	cred, err := s.creds.getCredential(p.CredentialID)
 	if err != nil {
 		return err
 	}
-	platformID, err := s.mastodon.publish(ctx, p, cred)
+	platformID, err := s.callPlatformPublish(ctx, p, cred)
 	if err != nil {
 		_ = markPostFailed(s.db, p.ID, err.Error())
 		return err
 	}
 	return markPostPublished(s.db, p.ID, platformID)
+}
+
+// callPlatformPublish dispatches a publish call to the correct platform client
+// based on the post's Platform field.
+func (s *Social) callPlatformPublish(ctx context.Context, p ScheduledPost, cred PlatformCredential) (string, error) {
+	switch p.Platform {
+	case "mastodon":
+		return s.mastodon.publish(ctx, p, cred)
+	case "linkedin":
+		if s.linkedin == nil {
+			return "", &publishError{msg: "LinkedIn is not configured on this server", terminal: true}
+		}
+		return s.linkedin.publish(ctx, p, cred)
+	default:
+		return "", &publishError{msg: "unknown platform: " + p.Platform, terminal: true}
+	}
 }

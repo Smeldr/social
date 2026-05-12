@@ -1,5 +1,25 @@
 # forge-social Changelog
 
+## [0.2.0] — 2026-05-12
+
+### Added
+
+- LinkedIn publishing via UGC Posts API (text-only; image upload deferred to v0.3.0)
+- `LinkedInConfig`: OAuth 2.0 client credentials for LinkedIn
+- LinkedIn OAuth 2.0 authorization code flow via `GET /oauth/linkedin/callback`
+- `fetchPersonURN`: fetches `urn:li:person:{sub}` from LinkedIn OpenID Connect userinfo
+- `ActorID` field on `PlatformCredential`: stores the LinkedIn person URN
+- `actor_id` column on `forge_social_credentials` with idempotent `ALTER TABLE` migration
+- `callPlatformPublish`: internal dispatcher routing posts to Mastodon or LinkedIn
+- `platform` field on `ScheduledPost` MCP schema (default `"mastodon"`)
+- `SocialCredential` MCP type replaces `MastodonCredential`; `create_social_credential` now accepts `platform` field (`"mastodon"` or `"linkedin"`)
+
+### Changed
+
+- `Config` now includes `LinkedIn LinkedInConfig` field (zero value disables LinkedIn)
+- `credentialModule.MCPCreate` now dispatches on `platform` field; `instance_url` is only required for Mastodon
+- `ScheduledPost.MCPCreate` defaults `platform` to `"mastodon"` when omitted (backward compatible)
+
 ## [0.1.0] — 2026-05-11
 
 ### Added

@@ -2,6 +2,7 @@ package forgesocial_test
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,7 +196,7 @@ func TestPost_ScheduledAtAutoSetsStatus(t *testing.T) {
 	}
 }
 
-func TestCredentialModule_ConnectReturnsRedirectURL(t *testing.T) {
+func TestCredentialModule_ConnectMastodonReturnsRedirectURL(t *testing.T) {
 	db := openTestDB(t)
 	social := forgesocial.New(db, forgesocial.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
@@ -212,6 +213,7 @@ func TestCredentialModule_ConnectReturnsRedirectURL(t *testing.T) {
 	ctx := adminCtx()
 
 	result, err := cm.MCPCreate(ctx, map[string]any{
+		"platform":     "mastodon",
 		"instance_url": "https://mastodon.social",
 	})
 	if err != nil {
@@ -225,7 +227,6 @@ func TestCredentialModule_ConnectReturnsRedirectURL(t *testing.T) {
 	if redirectURL == "" {
 		t.Error("redirect_url is empty")
 	}
-	// Should contain the OAuth authorize path.
 	if len(redirectURL) < 20 {
 		t.Errorf("redirect_url too short: %q", redirectURL)
 	}
@@ -248,5 +249,162 @@ func TestSchedulerStop_DoesNotHang(t *testing.T) {
 		// OK
 	case <-time.After(3 * time.Second):
 		t.Error("Stop() did not return within 3 seconds")
+	}
+}
+
+func TestLinkedIn_ConnectReturnsRedirectURL(t *testing.T) {
+	db := openTestDB(t)
+	social := forgesocial.New(db, forgesocial.Config{
+		Secret: []byte("test-secret-32-bytes-long-padded!"),
+		LinkedIn: forgesocial.LinkedInConfig{
+			ClientID:     "li-client-id",
+			ClientSecret: "li-client-secret",
+			RedirectURL:  "https://myapp.com/oauth/linkedin/callback",
+		},
+	})
+	defer social.Stop()
+
+	cm := social.CredentialModule()
+	ctx := adminCtx()
+
+	result, err := cm.MCPCreate(ctx, map[string]any{
+		"platform": "linkedin",
+	})
+	if err != nil {
+		t.Fatalf("MCPCreate linkedin: %v", err)
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type: %T", result)
+	}
+	redirectURL, _ := m["redirect_url"].(string)
+	if redirectURL == "" {
+		t.Error("redirect_url is empty")
+	}
+	// LinkedIn auth URL must contain linkedin.com
+	if !strings.Contains(redirectURL, "linkedin.com") {
+		t.Errorf("redirect_url does not contain linkedin.com: %q", redirectURL)
+	}
+}
+
+func TestLinkedIn_NotConfigured_ReturnsError(t *testing.T) {
+	db := openTestDB(t)
+	// No LinkedIn config — ClientID is empty, so linkedin client is nil.
+	social := forgesocial.New(db, forgesocial.Config{
+		Secret: []byte("test-secret-32-bytes-long-padded!"),
+	})
+	defer social.Stop()
+
+	cm := social.CredentialModule()
+	ctx := adminCtx()
+
+	_, err := cm.MCPCreate(ctx, map[string]any{"platform": "linkedin"})
+	if err == nil {
+		t.Error("expected error when LinkedIn not configured")
+	}
+}
+
+func TestPost_PlatformDefaultsMastodon(t *testing.T) {
+	db := openTestDB(t)
+	social := forgesocial.New(db, forgesocial.Config{
+		Secret: []byte("test-secret-32-bytes-long-padded!"),
+	})
+	defer social.Stop()
+	pm := social.PostModule()
+	ctx := adminCtx()
+
+	result, err := pm.MCPCreate(ctx, map[string]any{
+		"credential_id": "cred-1",
+		"body":          "default platform post",
+		// platform omitted
+	})
+	if err != nil {
+		t.Fatalf("MCPCreate: %v", err)
+	}
+	p := result.(forgesocial.ScheduledPost)
+	if p.Platform != "mastodon" {
+		t.Errorf("platform = %q; want %q", p.Platform, "mastodon")
+	}
+}
+
+func TestPost_PlatformLinkedIn(t *testing.T) {
+	db := openTestDB(t)
+	social := forgesocial.New(db, forgesocial.Config{
+		Secret: []byte("test-secret-32-bytes-long-padded!"),
+	})
+	defer social.Stop()
+	pm := social.PostModule()
+	ctx := adminCtx()
+
+	result, err := pm.MCPCreate(ctx, map[string]any{
+		"credential_id": "cred-li-1",
+		"body":          "Hello, LinkedIn!",
+		"platform":      "linkedin",
+	})
+	if err != nil {
+		t.Fatalf("MCPCreate: %v", err)
+	}
+	p := result.(forgesocial.ScheduledPost)
+	if p.Platform != "linkedin" {
+		t.Errorf("platform = %q; want %q", p.Platform, "linkedin")
+	}
+}
+
+func TestPost_PlatformInvalidReturnsError(t *testing.T) {
+	db := openTestDB(t)
+	social := forgesocial.New(db, forgesocial.Config{
+		Secret: []byte("test-secret-32-bytes-long-padded!"),
+	})
+	defer social.Stop()
+	pm := social.PostModule()
+	ctx := adminCtx()
+
+	_, err := pm.MCPCreate(ctx, map[string]any{
+		"credential_id": "cred-1",
+		"body":          "bad platform",
+		"platform":      "twitter",
+	})
+	if err == nil {
+		t.Error("expected error for invalid platform")
+	}
+}
+
+func TestMigration_ActorIDColumn(t *testing.T) {
+	// Simulate a v0.1.0 database: create the old schema without actor_id,
+	// then call CreateTables (which runs the migration) and verify the column exists.
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	// Create the old credentials table without actor_id.
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS forge_social_credentials (
+		id            TEXT PRIMARY KEY,
+		platform      TEXT NOT NULL,
+		name          TEXT NOT NULL,
+		instance_url  TEXT NOT NULL,
+		access_token  TEXT NOT NULL,
+		refresh_token TEXT NOT NULL DEFAULT '',
+		expires_at    DATETIME,
+		created_at    DATETIME NOT NULL,
+		updated_at    DATETIME NOT NULL
+	)`)
+	if err != nil {
+		t.Fatalf("create old table: %v", err)
+	}
+
+	// Run CreateTables — should succeed and add actor_id.
+	if err := forgesocial.CreateTables(db); err != nil {
+		t.Fatalf("CreateTables migration: %v", err)
+	}
+
+	// Verify actor_id column exists by inserting a row.
+	_, err = db.Exec(`INSERT INTO forge_social_credentials
+		(id, platform, name, instance_url, actor_id, access_token, created_at, updated_at)
+		VALUES ('id1','mastodon','test','https://m.social','','enc_token',
+		        datetime('now'), datetime('now'))`)
+	if err != nil {
+		t.Errorf("insert with actor_id failed after migration: %v", err)
 	}
 }
