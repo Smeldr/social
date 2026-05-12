@@ -81,7 +81,7 @@ func (c *mastodonClient) authURL(state string) string {
 		"scope":         {"write:statuses write:media"},
 		"state":         {state},
 	}
-	return strings.TrimRight(c.cfg.InstanceURL, "/") + "/oauth/authorize?" + params.Encode()
+	return strings.TrimRight(c.cfg.InstanceURL, "/") + "/oauth/authorize?" + strings.ReplaceAll(params.Encode(), "+", "%20")
 }
 
 // exchangeCode exchanges an authorization code for an access token.

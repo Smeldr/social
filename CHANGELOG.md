@@ -1,5 +1,11 @@
 # forge-social Changelog
 
+## [0.3.1] — 2026-05-12
+
+### Fixed
+
+- `authURL`: encode OAuth scope with `%20` instead of `+` to satisfy Mastodon's authorization endpoint (`url.Values.Encode` uses `+` for spaces; Mastodon rejects it with "scope is invalid")
+
 ## [0.3.0] — 2026-05-12
 
 ### Added
