@@ -201,7 +201,7 @@ defer social.Stop()
 
 ## Requirements
 
-- Go 1.22+
+- Go 1.26+
 - `forge-cms.dev/forge` v1.20.0+
 - A `forge.DB` (SQLite or Postgres)
 
