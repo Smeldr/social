@@ -1,5 +1,19 @@
 # forge-social Changelog
 
+## [0.3.0] — 2026-05-12
+
+### Added
+
+- Layer 1 agent routing: `AddRoutes(app, ...Route)` wires signal-bus events to outbound agent HTTP calls
+- `Route` type with `OnPublish`, `OnSchedule`, `OnArchive`, `OnDelete` builder functions
+- SSRF protection: agent URLs validated at `AddRoutes` time — must be HTTPS, non-private, non-local
+- `forge_social_route_jobs` table: pending/delivered/failed outbound delivery jobs with retry state
+- `forge_social_route_log` table: per-attempt delivery log
+- Route delivery worker goroutine with the same exponential-backoff table as Layer 2 (30s/2m/10m/1h/terminal)
+- `X-Forge-Signature: sha256=<HMAC-SHA256>` header on every outbound POST (key = `Config.Secret`)
+- Error classification: 2xx → delivered; 4xx (non-429) → terminal; 429 → honour Retry-After; 5xx/network → transient retry
+- `Social.Stop()` now also drains the route delivery worker when `AddRoutes` was called
+
 ## [0.2.0] — 2026-05-12
 
 ### Added

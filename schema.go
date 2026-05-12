@@ -57,6 +57,28 @@ func CreateTables(db forge.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_forge_social_posts_status_scheduled
 			ON forge_social_posts(status, scheduled_at)`,
+		`CREATE TABLE IF NOT EXISTS forge_social_route_jobs (
+			id           TEXT PRIMARY KEY,
+			signal       TEXT NOT NULL,
+			content_type TEXT NOT NULL,
+			agent_url    TEXT NOT NULL,
+			payload      TEXT NOT NULL,
+			status       TEXT NOT NULL DEFAULT 'pending',
+			attempts     INTEGER NOT NULL DEFAULT 0,
+			next_attempt DATETIME,
+			last_error   TEXT NOT NULL DEFAULT '',
+			created_at   DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_forge_social_route_jobs_status
+			ON forge_social_route_jobs(status, next_attempt)`,
+		`CREATE TABLE IF NOT EXISTS forge_social_route_log (
+			id           TEXT PRIMARY KEY,
+			job_id       TEXT NOT NULL REFERENCES forge_social_route_jobs(id),
+			attempt      INTEGER NOT NULL,
+			status_code  INTEGER NOT NULL DEFAULT 0,
+			error        TEXT NOT NULL DEFAULT '',
+			attempted_at DATETIME NOT NULL
+		)`,
 	}
 
 	ctx := context.Background()

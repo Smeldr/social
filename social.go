@@ -28,6 +28,11 @@
 //	    forgemcp.WithModule(social.PostModule()),
 //	    forgemcp.WithModule(social.CredentialModule()),
 //	)
+//	// Layer 1 — wire agent routing (optional).
+//	// Fires on AfterPublish for "Post" content type.
+//	social.AddRoutes(app,
+//	    forgesocial.OnPublish("Post", "https://agent.example.com/social"),
+//	)
 package forgesocial
 
 import (
@@ -51,6 +56,7 @@ type Config struct {
 
 // Social manages platform publishing for a Forge application.
 // Create it with [New] and register its HTTP routes with [Register].
+// Optionally register agent routes with [AddRoutes] for Layer 1 routing.
 // Call [Stop] in your application's shutdown handler.
 type Social struct {
 	db       forge.DB
@@ -59,6 +65,7 @@ type Social struct {
 	mastodon *mastodonClient
 	linkedin *linkedinClient
 	sched    *scheduler
+	router   *Router // nil if AddRoutes was not called
 }
 
 // New creates a Social instance backed by db. It panics if db is nil,
@@ -105,10 +112,14 @@ func (s *Social) Register(app *forge.App) {
 	s.sched.start()
 }
 
-// Stop gracefully shuts down the scheduler and waits for any in-progress
-// publish operation to complete. Call this in your application's shutdown handler.
+// Stop gracefully shuts down the scheduler and (if AddRoutes was called) the
+// route delivery worker. It waits for any in-progress operations to complete.
+// Call this in your application's shutdown handler.
 func (s *Social) Stop() {
 	s.sched.stop()
+	if s.router != nil {
+		s.router.stopWorker()
+	}
 }
 
 // PostModule returns a [forge.MCPModule] that exposes [ScheduledPost] as MCP
