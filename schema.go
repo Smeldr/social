@@ -79,6 +79,17 @@ func CreateTables(db forge.DB) error {
 			error        TEXT NOT NULL DEFAULT '',
 			attempted_at DATETIME NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS forge_social_publication_schedules (
+			id            TEXT PRIMARY KEY,
+			credential_id TEXT NOT NULL UNIQUE,
+			slots         TEXT NOT NULL DEFAULT '[]',
+			status        TEXT NOT NULL DEFAULT 'active',
+			last_tick_at  DATETIME,
+			created_at    DATETIME NOT NULL,
+			updated_at    DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_forge_social_pub_schedules_status
+			ON forge_social_publication_schedules(status)`,
 	}
 
 	ctx := context.Background()

@@ -30,6 +30,9 @@ type MastodonConfig struct {
 	// SuccessURL is an optional URL to redirect the browser to after a
 	// successful OAuth callback. If empty, a plain HTML confirmation is shown.
 	SuccessURL string
+	// Scopes is the list of OAuth 2.0 scopes to request. Defaults to
+	// ["write:statuses", "write:media"] when empty.
+	Scopes []string
 }
 
 // mastodonTokenResponse is the JSON payload returned by Mastodon's /oauth/token endpoint.
@@ -71,6 +74,15 @@ func newMastodonClient(cfg MastodonConfig) *mastodonClient {
 	}
 }
 
+// effectiveScope returns the OAuth scope string to use. If MastodonConfig.Scopes is
+// non-empty it joins them with a space; otherwise it returns the default scope.
+func (c *mastodonClient) effectiveScope() string {
+	if len(c.cfg.Scopes) > 0 {
+		return strings.Join(c.cfg.Scopes, " ")
+	}
+	return "write:statuses write:media"
+}
+
 // authURL builds the Mastodon OAuth 2.0 authorization URL for the given state token.
 // The user must visit this URL in a browser to authorise the application.
 func (c *mastodonClient) authURL(state string) string {
@@ -78,7 +90,7 @@ func (c *mastodonClient) authURL(state string) string {
 		"client_id":     {c.cfg.ClientID},
 		"redirect_uri":  {c.cfg.RedirectURL},
 		"response_type": {"code"},
-		"scope":         {"write:statuses write:media"},
+		"scope":         {c.effectiveScope()},
 		"state":         {state},
 	}
 	return strings.TrimRight(c.cfg.InstanceURL, "/") + "/oauth/authorize?" + strings.ReplaceAll(params.Encode(), "+", "%20")
@@ -93,7 +105,7 @@ func (c *mastodonClient) exchangeCode(ctx context.Context, code string) (mastodo
 		"client_id":     {c.cfg.ClientID},
 		"client_secret": {c.cfg.ClientSecret},
 		"redirect_uri":  {c.cfg.RedirectURL},
-		"scope":         {"write:statuses write:media"},
+		"scope":         {c.effectiveScope()},
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,

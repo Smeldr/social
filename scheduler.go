@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log"
 	"time"
+
+	forge "forge-cms.dev/forge"
 )
 
 // schedulerFallbackInterval is the maximum time the scheduler waits between
@@ -86,6 +88,8 @@ func (sc *scheduler) nextInterval() time.Duration {
 }
 
 // processDue fetches all due posts and publishes each one.
+// It also processes queued posts for any active PublicationSchedule whose
+// slots have fired since the last tick.
 func (sc *scheduler) processDue(ctx context.Context) {
 	posts, err := duePosts(sc.social.db)
 	if err != nil {
@@ -98,7 +102,69 @@ func (sc *scheduler) processDue(ctx context.Context) {
 		}
 		sc.publishWithRetry(ctx, p)
 	}
+
+	sc.processSlotQueue(ctx)
+
 	_ = purgeExpiredOAuthStates(sc.social.db)
+}
+
+// processSlotQueue iterates over all active PublicationSchedules, determines
+// which slots have fired since the schedule's last_tick_at, and for each
+// fired slot dequeues the oldest queued post for that credential and publishes it.
+// At most len(slots) posts are published per tick to avoid flooding after downtime.
+func (sc *scheduler) processSlotQueue(ctx context.Context) {
+	now := time.Now().UTC()
+
+	schedules, err := listActiveSchedules(sc.social.db)
+	if err != nil {
+		log.Printf("forgesocial: scheduler: list active schedules: %v", err)
+		return
+	}
+
+	for _, sched := range schedules {
+		if ctx.Err() != nil {
+			return
+		}
+
+		// Determine the window start: last_tick_at if set, else created_at.
+		from := sched.CreatedAt
+		if sched.LastTickAt != nil {
+			from = *sched.LastTickAt
+		}
+
+		// Always advance last_tick_at, even if no slot fires.
+		if err := updateScheduleLastTick(sc.social.db, sched.ID, now); err != nil {
+			log.Printf("forgesocial: scheduler: update last_tick_at for schedule %s: %v", sched.ID, err)
+		}
+
+		if len(sched.Slots) == 0 {
+			continue
+		}
+
+		fireCounts := firedSlotsBetween(sched, from, now)
+
+		// Cap: at most len(slots) posts published per tick.
+		published := 0
+		cap := len(sched.Slots)
+
+		for _, count := range fireCounts {
+			for i := 0; i < count && published < cap; i++ {
+				if ctx.Err() != nil {
+					return
+				}
+				p, err := dequeueOldestQueued(sc.social.db, sched.CredentialID)
+				if errors.Is(err, forge.ErrNotFound) {
+					break // queue empty for this credential
+				}
+				if err != nil {
+					log.Printf("forgesocial: scheduler: dequeue for credential %s: %v", sched.CredentialID, err)
+					break
+				}
+				sc.publishWithRetry(ctx, p)
+				published++
+			}
+		}
+	}
 }
 
 // publishWithRetry attempts to publish post p. If the publish fails with a

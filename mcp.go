@@ -77,8 +77,8 @@ func (m *postModule) MCPSchema() []forge.MCPField {
 			JSONName:    "status",
 			Type:        "string",
 			Required:    false,
-			Enum:        []string{"draft", "scheduled", "archived"},
-			Description: "Post lifecycle status. Omit on create (defaults to 'draft'). Use publish_scheduled_post to publish immediately.",
+			Enum:        []string{"draft", "scheduled", "queued", "archived"},
+			Description: "Post lifecycle status. Omit on create (defaults to 'draft'). Set to 'queued' to enqueue the post for the next available PublicationSchedule slot. Use publish_scheduled_post to publish immediately.",
 		},
 	}
 }
@@ -204,10 +204,10 @@ func (m *postModule) MCPUpdate(_ forge.Context, slug string, fields map[string]a
 
 	if v, ok := fields["status"].(string); ok {
 		switch PostStatus(v) {
-		case PostStatusDraft, PostStatusScheduled, PostStatusArchived:
+		case PostStatusDraft, PostStatusScheduled, PostStatusQueued, PostStatusArchived:
 			p.Status = PostStatus(v)
 		default:
-			return nil, forge.Err("status", "must be draft, scheduled, or archived")
+			return nil, forge.Err("status", "must be draft, scheduled, queued, or archived")
 		}
 	}
 

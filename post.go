@@ -24,6 +24,10 @@ const (
 	PostStatusFailed PostStatus = "failed"
 	// PostStatusArchived means the post has been manually archived.
 	PostStatusArchived PostStatus = "archived"
+	// PostStatusQueued means the post is waiting for the next available slot
+	// in a PublicationSchedule. It has no scheduled_at and will be published
+	// by the slot-queue scheduler when a slot fires for its credential.
+	PostStatusQueued PostStatus = "queued"
 )
 
 // ScheduledPost represents a piece of content to be published to a social platform.

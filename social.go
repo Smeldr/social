@@ -135,3 +135,10 @@ func (s *Social) PostModule() forge.MCPModule {
 func (s *Social) CredentialModule() forge.MCPModule {
 	return &credentialModule{social: s}
 }
+
+// ScheduleModule returns a [forge.MCPModule] that exposes [PublicationSchedule]
+// as MCP tools (create, update, get, list, delete).
+// Pass it to forgemcp.WithModule when wiring the MCP server.
+func (s *Social) ScheduleModule() forge.MCPModule {
+	return &scheduleModule{social: s}
+}

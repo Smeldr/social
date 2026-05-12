@@ -1,6 +1,17 @@
 # forge-social Changelog
 
-## [0.3.1] — 2026-05-12
+## [0.4.0] — 2026-05-12
+
+### Added
+
+- `MastodonConfig.Scopes []string` — configurable OAuth scope; defaults to `write:statuses write:media` when empty
+- `PublicationSchedule` content type: recurring weekly time slots per credential (`forge_social_publication_schedules` table)
+- `Slot` type: `weekday` (0–6), `time` (HH:MM), `timezone` (IANA)
+- `PostStatusQueued` (`"queued"`) — posts without `scheduled_at` enter the slot queue instead of a fixed time
+- Extended scheduler: `processSlotQueue` runs on every tick — fires slots since `last_tick_at`, dequeues oldest queued post per fired slot, caps at `len(slots)` per tick, catches up on missed slots
+- `Social.ScheduleModule()` returning a `forge.MCPModule` with five MCP tools: `create_publication_schedule`, `get_publication_schedule`, `update_publication_schedule`, `list_publication_schedules`, `delete_publication_schedule`
+- `"queued"` added to `create_scheduled_post` / `update_scheduled_post` status enum
+
 
 ### Fixed
 
