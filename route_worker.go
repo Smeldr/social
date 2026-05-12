@@ -109,7 +109,7 @@ func (r *Router) deliver(hc *http.Client, j routeJob) {
 		if delay <= 0 {
 			delay = routeRetryDelays[min(attempt-1, len(routeRetryDelays)-1)]
 		}
-		msg := fmt.Sprintf("429 Too Many Requests")
+		msg := "429 Too Many Requests"
 		r.jobs.logAttempt(ctx, j.ID, attempt, code, msg)
 		nextAt := time.Now().UTC().Add(delay)
 		_ = r.jobs.scheduleRetry(ctx, j.ID, attempt, nextAt, msg)

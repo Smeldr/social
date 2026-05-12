@@ -95,37 +95,6 @@ func (cs *credentialStore) decryptToken(enc string) (string, error) {
 	return string(plain), nil
 }
 
-// upsertCredential inserts or replaces a credential row.
-// On conflict (same platform + instance_url), the existing row is updated.
-// accessToken and refreshToken are encrypted before storage.
-func (cs *credentialStore) upsertCredential(cred PlatformCredential) error {
-	encAccess, err := cs.encryptToken(cred.accessToken)
-	if err != nil {
-		return fmt.Errorf("forgesocial: encrypt access token: %w", err)
-	}
-	encRefresh, err := cs.encryptToken(cred.refreshToken)
-	if err != nil {
-		return fmt.Errorf("forgesocial: encrypt refresh token: %w", err)
-	}
-	now := time.Now().UTC()
-	_, err = cs.db.ExecContext(context.Background(), `
-		INSERT INTO forge_social_credentials
-			(id, platform, name, instance_url, actor_id, access_token, refresh_token, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			name=excluded.name,
-			actor_id=excluded.actor_id,
-			access_token=excluded.access_token,
-			refresh_token=excluded.refresh_token,
-			expires_at=excluded.expires_at,
-			updated_at=excluded.updated_at`,
-		cred.ID, cred.Platform, cred.Name, cred.InstanceURL, cred.ActorID,
-		encAccess, encRefresh, nullTime(cred.ExpiresAt),
-		now, now,
-	)
-	return err
-}
-
 // upsertCredentialByInstance updates an existing credential row matching
 // (platform, instance_url), or inserts a new row. Returns the credential ID.
 // actorID is the platform-specific author identifier (e.g. LinkedIn person URN);

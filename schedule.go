@@ -97,13 +97,6 @@ func getSchedule(db forge.DB, id string) (PublicationSchedule, error) {
 		FROM forge_social_publication_schedules WHERE id=?`, id))
 }
 
-// getScheduleByCredential returns the schedule for the given credential_id.
-func getScheduleByCredential(db forge.DB, credentialID string) (PublicationSchedule, error) {
-	return scanSchedule(db.QueryRowContext(context.Background(), `
-		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
-		FROM forge_social_publication_schedules WHERE credential_id=?`, credentialID))
-}
-
 func listSchedules(db forge.DB) ([]PublicationSchedule, error) {
 	rows, err := db.QueryContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
@@ -232,10 +225,6 @@ func firedSlotsBetween(s PublicationSchedule, from, now time.Time) []int {
 }
 
 // ─── scan helpers ─────────────────────────────────────────────────────────────
-
-type rowScanner interface {
-	Scan(dest ...any) error
-}
 
 func scanSchedule(row *sql.Row) (PublicationSchedule, error) {
 	var s PublicationSchedule
