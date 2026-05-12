@@ -50,6 +50,7 @@ defer social.Stop()    // drain scheduler + delivery worker on shutdown
 mcpSrv := forgemcp.New(app,
     forgemcp.WithModule(social.PostModule()),
     forgemcp.WithModule(social.CredentialModule()),
+    forgemcp.WithModule(social.ScheduleModule()),   // slot-queue (v0.4.0+)
 )
 
 // Wire agent routing (optional — Layer 1).
@@ -75,6 +76,50 @@ Create a post via MCP tool `create_scheduled_post`, set `scheduled_at`, and the 
 **Platforms:** `mastodon` (default) or `linkedin`.  
 **Body limits:** Mastodon 500 characters; LinkedIn 3000 characters.  
 **Media:** Set `media_url` to attach an HTTPS image URL.
+
+---
+
+## Slot queue (v0.4.0+)
+
+Instead of a fixed `scheduled_at` time, posts can be queued for the next available slot in a `PublicationSchedule`.
+
+### Create a schedule
+
+```go
+// Via MCP: create_publication_schedule
+// credential_id: the ID of a connected SocialCredential
+// slots: JSON array of slot objects
+// status: "active" (default) or "paused"
+```
+
+Slot format:
+
+```json
+{ "weekday": 1, "time": "09:00", "timezone": "Europe/Copenhagen" }
+```
+
+- `weekday`: 0 = Sunday … 6 = Saturday (matches Go `time.Weekday`)
+- `time`: HH:MM in 24-hour format
+- `timezone`: IANA timezone name (e.g. `"Europe/Copenhagen"`, `"America/New_York"`)
+
+Each credential may have at most one schedule.
+
+### Queue a post
+
+Set `status: "queued"` on `create_scheduled_post` (omit `scheduled_at`). The scheduler dequeues the oldest queued post for each credential whenever a slot fires.
+
+```
+draft → queued → published
+```
+
+### Catch-up policy
+
+If the server was offline when a slot fired, the scheduler catches up on the next tick. One post is published per missed slot. The total catch-up per tick is capped at `len(slots)` to avoid flooding.
+
+### Schedule status
+
+- `active` — slots fire normally
+- `paused` — slots are skipped; queued posts remain in the queue
 
 ---
 
@@ -111,6 +156,11 @@ OAuth tokens are encrypted at rest with AES-256-GCM, keyed from `Config.Secret`.
 | `list_social_credentials` | List all credentials |
 | `get_social_credential` | Read a credential by ID |
 | `delete_social_credential` | Delete a credential |
+| `create_publication_schedule` | Create a recurring slot schedule for a credential |
+| `get_publication_schedule` | Read a schedule by ID |
+| `update_publication_schedule` | Update slots or pause/resume |
+| `list_publication_schedules` | List all schedules |
+| `delete_publication_schedule` | Delete a schedule |
 
 ---
 
