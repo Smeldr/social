@@ -1,5 +1,12 @@
 # forge-social Changelog
 
+## [0.4.1] — 2026-05-13
+
+### Fixed
+
+- `validateSlots`: rejects empty `timezone` field with an actionable error instead of silently defaulting to UTC
+- Embed Go's timezone database (`time/tzdata`) in the binary — `time.LoadLocation` now works on Alpine and scratch containers with no OS tzdata installed
+
 ## [0.4.0] — 2026-05-12
 
 ### Added
