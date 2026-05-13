@@ -175,6 +175,9 @@ func (m *scheduleModule) MCPDelete(_ forge.Context, slug string) error {
 // validateSlots checks that each slot has a valid weekday, HH:MM time, and IANA timezone.
 func validateSlots(slots []Slot) error {
 	for i, slot := range slots {
+		if slot.Timezone == "" {
+			return forge.Err("slots", fmt.Sprintf("slot %d: timezone is required (IANA name, e.g. \"Europe/Copenhagen\")", i))
+		}
 		if slot.Weekday < 0 || slot.Weekday > 6 {
 			return forge.Err("slots", fmt.Sprintf("slot %d: weekday must be 0–6 (0=Sunday)", i))
 		}
