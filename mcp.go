@@ -302,8 +302,8 @@ func (m *credentialModule) MCPSchema() []forge.MCPField {
 			JSONName:    "platform",
 			Type:        "string",
 			Required:    true,
-			Enum:        []string{"mastodon", "linkedin"},
-			Description: "Platform to connect: 'mastodon' or 'linkedin'.",
+			Enum:        []string{"mastodon", "linkedin", "x"},
+			Description: "Platform to connect: 'mastodon', 'linkedin', or 'x'.",
 		},
 		{
 			Name:        "InstanceURL",

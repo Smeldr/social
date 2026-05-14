@@ -1,5 +1,11 @@
 # forge-social Changelog
 
+## [0.5.1] — 2026-05-14
+
+### Fixed
+
+- `create_social_credential` MCP schema: `platform` enum was missing `"x"` — schema now declares `mastodon | linkedin | x`. MCPCreate already handled `"x"` correctly.
+
 ## [0.5.0] — 2026-05-14
 
 ### Added
