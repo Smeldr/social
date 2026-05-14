@@ -263,4 +263,3 @@ func (s *Social) handleXCallback(w http.ResponseWriter, r *http.Request) {
 <body><p>Connected to X successfully. You can close this tab.</p></body>
 </html>`)
 }
-

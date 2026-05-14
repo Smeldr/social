@@ -1,5 +1,11 @@
 # forge-social Changelog
 
+## [0.5.2] — 2026-05-14
+
+### Fixed
+
+- X (Twitter) access tokens are now proactively refreshed before publish when within 5 minutes of expiry. The stored refresh token is exchanged for a new access+refresh token pair, which is persisted to the DB before the publish call proceeds. If the refresh fails, the existing token is used and the normal retry logic handles any resulting 401. X does not always rotate the refresh token — the existing one is retained when omitted from the response.
+
 ## [0.5.1] — 2026-05-14
 
 ### Fixed

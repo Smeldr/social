@@ -187,6 +187,8 @@ func (sc *scheduler) publishWithRetry(ctx context.Context, p ScheduledPost) {
 		return
 	}
 
+	s.maybeRefreshXCredential(ctx, &cred)
+
 	platformID, publishErr := s.callPlatformPublish(ctx, p, cred)
 
 	if publishErr == nil {
@@ -244,12 +246,66 @@ func (s *Social) publishNow(ctx context.Context, p ScheduledPost) error {
 	if err != nil {
 		return err
 	}
+	s.maybeRefreshXCredential(ctx, &cred)
 	platformID, err := s.callPlatformPublish(ctx, p, cred)
 	if err != nil {
 		_ = markPostFailed(s.db, p.ID, err.Error())
 		return err
 	}
 	return markPostPublished(s.db, p.ID, platformID)
+}
+
+// maybeRefreshXCredential checks whether cred's X access token is within
+// xTokenExpiryBuffer of expiry and, if so, exchanges the refresh token for a
+// new pair. cred is updated in place so the current publish uses the new token.
+//
+// On refresh or persist failure the error is logged and cred is left unchanged,
+// allowing the caller to attempt publish with the existing token and let retry
+// logic handle any resulting 401.
+func (s *Social) maybeRefreshXCredential(ctx context.Context, cred *PlatformCredential) {
+	if cred.Platform != "x" {
+		return
+	}
+	if cred.ExpiresAt == nil || time.Until(*cred.ExpiresAt) > xTokenExpiryBuffer {
+		return
+	}
+
+	s.mu.RLock()
+	tc := s.twitter
+	s.mu.RUnlock()
+
+	if tc == nil {
+		return
+	}
+
+	tr, err := tc.refreshXToken(ctx, cred.refreshToken)
+	if err != nil {
+		log.Printf("forgesocial: X token refresh failed for credential %s: %v — publishing with existing token", cred.ID, err)
+		return
+	}
+
+	newRefresh := tr.RefreshToken
+	if newRefresh == "" {
+		newRefresh = cred.refreshToken
+	}
+
+	var expiresAt *time.Time
+	if tr.ExpiresIn > 0 {
+		t := time.Now().UTC().Add(time.Duration(tr.ExpiresIn) * time.Second)
+		expiresAt = &t
+	}
+
+	if _, err := s.creds.upsertCredentialByInstance(
+		"x", xAPIBase, cred.Name,
+		tr.AccessToken, newRefresh, cred.ActorID, expiresAt,
+	); err != nil {
+		log.Printf("forgesocial: X token persist failed for credential %s: %v — publishing with existing token", cred.ID, err)
+		return
+	}
+
+	cred.accessToken = tr.AccessToken
+	cred.refreshToken = newRefresh
+	cred.ExpiresAt = expiresAt
 }
 
 // callPlatformPublish dispatches a publish call to the correct platform client

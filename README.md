@@ -3,6 +3,7 @@
 Social post scheduling and AI agent routing for [Forge](https://forge-cms.dev) applications.
 
 [![Go Reference](https://pkg.go.dev/badge/forge-cms.dev/forge-social.svg)](https://pkg.go.dev/forge-cms.dev/forge-social)
+**v0.5.2 — stable.** See [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 go get forge-cms.dev/forge-social@latest
@@ -69,7 +70,7 @@ Create a post via MCP tool `create_scheduled_post`, set `scheduled_at`, and the 
 
 **Platforms:** `mastodon` (default), `linkedin`, or `x`.  
 **Body limits:** Mastodon 500 characters; LinkedIn 3000 characters; X 280 characters (returns terminal error if exceeded — not truncated).  
-**Media:** Set `media_url` to attach an HTTPS image URL (Mastodon and LinkedIn only; X media is not supported in v0.5.0).
+**Media:** Set `media_url` to attach an HTTPS image URL (Mastodon and LinkedIn only; X media is not yet supported).
 
 ---
 

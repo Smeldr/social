@@ -18,6 +18,11 @@ const (
 	xAPIBase       = "https://api.twitter.com"
 	xAuthBase      = "https://twitter.com"
 	xMaxBodyLength = 280
+
+	// xTokenExpiryBuffer is the window before expiry within which an X access
+	// token is proactively refreshed. X tokens expire after 2 hours; refreshing
+	// 5 minutes early prevents failures on long-running publish retries.
+	xTokenExpiryBuffer = 5 * time.Minute
 )
 
 // xConfig holds the OAuth 2.0 app credentials for X (Twitter).
@@ -128,6 +133,46 @@ func (c *twitterClient) exchangeCode(ctx context.Context, code, codeVerifier str
 	var tr xTokenResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
 		return xTokenResponse{}, fmt.Errorf("forgesocial: X token exchange parse: %w", err)
+	}
+	return tr, nil
+}
+
+// refreshXToken exchanges a refresh token for a new access+refresh token pair.
+// If the response omits the refresh token, the caller must retain the existing one.
+func (c *twitterClient) refreshXToken(ctx context.Context, refreshTok string) (xTokenResponse, error) {
+	form := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshTok},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		xAPIBase+"/2/oauth2/token",
+		bytes.NewBufferString(form.Encode()),
+	)
+	if err != nil {
+		return xTokenResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.SetBasicAuth(c.cfg.ClientID, c.cfg.ClientSecret)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh read: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh: HTTP %d: %s",
+			resp.StatusCode, truncate(string(body), 256))
+	}
+
+	var tr xTokenResponse
+	if err := json.Unmarshal(body, &tr); err != nil {
+		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh parse: %w", err)
 	}
 	return tr, nil
 }
