@@ -90,6 +90,11 @@ func CreateTables(db forge.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_forge_social_pub_schedules_status
 			ON forge_social_publication_schedules(status)`,
+		`CREATE TABLE IF NOT EXISTS forge_social_platform_config (
+			platform   TEXT PRIMARY KEY,
+			config     TEXT NOT NULL,
+			updated_at DATETIME NOT NULL
+		)`,
 	}
 
 	ctx := context.Background()
@@ -107,6 +112,14 @@ func CreateTables(db forge.DB) error {
 		`ALTER TABLE forge_social_credentials ADD COLUMN actor_id TEXT NOT NULL DEFAULT ''`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("forgesocial: migrate actor_id: %w", err)
+	}
+
+	// Idempotent migration: add code_verifier column for databases created before v0.5.0.
+	// Stores the PKCE code_verifier for the X OAuth 2.0 flow; empty string for other platforms.
+	_, err = db.ExecContext(ctx,
+		`ALTER TABLE forge_social_oauth_states ADD COLUMN code_verifier TEXT NOT NULL DEFAULT ''`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("forgesocial: migrate code_verifier: %w", err)
 	}
 
 	return nil

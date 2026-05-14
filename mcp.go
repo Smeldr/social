@@ -48,7 +48,7 @@ func (m *postModule) MCPSchema() []forge.MCPField {
 			JSONName:    "platform",
 			Type:        "string",
 			Required:    false,
-			Enum:        []string{"mastodon", "linkedin"},
+			Enum:        []string{"mastodon", "linkedin", "x"},
 			Description: "Target publishing platform. Defaults to 'mastodon' when omitted.",
 		},
 		{
@@ -127,8 +127,8 @@ func (m *postModule) MCPCreate(_ forge.Context, fields map[string]any) (any, err
 	if platform == "" {
 		platform = "mastodon" // backward-compatible default
 	}
-	if platform != "mastodon" && platform != "linkedin" {
-		return nil, forge.Err("platform", "must be 'mastodon' or 'linkedin'")
+	if platform != "mastodon" && platform != "linkedin" && platform != "x" {
+		return nil, forge.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
 	}
 
 	now := time.Now().UTC()
@@ -310,7 +310,7 @@ func (m *credentialModule) MCPSchema() []forge.MCPField {
 			JSONName:    "instance_url",
 			Type:        "string",
 			Required:    false,
-			Description: "Base URL of the Mastodon instance, e.g. https://mastodon.social. Required for platform='mastodon'. Ignored for LinkedIn.",
+			Description: "Base URL of the Mastodon instance, e.g. https://mastodon.social. Required for platform='mastodon'. Not applicable for LinkedIn or X.",
 		},
 	}
 }
@@ -362,7 +362,7 @@ func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (an
 			return nil, forge.Err("instance_url", "required for platform='mastodon'")
 		}
 		state := forge.NewID()
-		if err := insertOAuthState(m.social.creds.db, state, "mastodon"); err != nil {
+		if err := insertOAuthState(m.social.creds.db, state, "mastodon", ""); err != nil {
 			return nil, err
 		}
 		return map[string]any{
@@ -375,7 +375,7 @@ func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (an
 			return nil, forge.Err("platform", "LinkedIn is not configured on this server")
 		}
 		state := forge.NewID()
-		if err := insertOAuthState(m.social.creds.db, state, "linkedin"); err != nil {
+		if err := insertOAuthState(m.social.creds.db, state, "linkedin", ""); err != nil {
 			return nil, err
 		}
 		return map[string]any{
@@ -383,8 +383,28 @@ func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (an
 			"message":      "Visit redirect_url in a browser to authorise LinkedIn. The credential will be saved automatically after authorisation.",
 		}, nil
 
+	case "x":
+		m.social.mu.RLock()
+		tc := m.social.twitter
+		m.social.mu.RUnlock()
+		if tc == nil {
+			return nil, forge.Err("platform", "X is not configured on this server — use configure_platform first")
+		}
+		verifier, challenge, err := generatePKCE()
+		if err != nil {
+			return nil, err
+		}
+		state := forge.NewID()
+		if err := insertOAuthState(m.social.creds.db, state, "x", verifier); err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"redirect_url": tc.authURL(state, challenge),
+			"message":      "Visit redirect_url in a browser to authorise X. The credential will be saved automatically after authorisation.",
+		}, nil
+
 	default:
-		return nil, forge.Err("platform", "must be 'mastodon' or 'linkedin'")
+		return nil, forge.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
 	}
 }
 

@@ -14,7 +14,7 @@ go get forge-cms.dev/forge-social@latest
 
 `forge-social` adds two layers to any Forge application:
 
-**Layer 2 — Scheduler:** Create `ScheduledPost` records; the built-in scheduler publishes them to Mastodon or LinkedIn at the right time, with exponential backoff and automatic retries.
+**Layer 2 — Scheduler:** Create `ScheduledPost` records; the built-in scheduler publishes them to Mastodon, LinkedIn, or X (Twitter) at the right time, with exponential backoff and automatic retries.
 
 **Layer 1 — Agent routing:** Wire Forge lifecycle signals to outbound HTTP calls, so AI agents can react when content is published, scheduled, archived, or deleted.
 
@@ -30,17 +30,6 @@ import (
 
 social := forgesocial.New(db, forgesocial.Config{
     Secret: cfg.Secret,
-    Mastodon: forgesocial.MastodonConfig{
-        ClientID:     os.Getenv("MASTODON_CLIENT_ID"),
-        ClientSecret: os.Getenv("MASTODON_CLIENT_SECRET"),
-        InstanceURL:  os.Getenv("MASTODON_INSTANCE_URL"),
-        RedirectURL:  cfg.BaseURL + "/oauth/mastodon/callback",
-    },
-    LinkedIn: forgesocial.LinkedInConfig{          // optional
-        ClientID:     os.Getenv("LINKEDIN_CLIENT_ID"),
-        ClientSecret: os.Getenv("LINKEDIN_CLIENT_SECRET"),
-        RedirectURL:  cfg.BaseURL + "/oauth/linkedin/callback",
-    },
 })
 
 social.Register(app)   // wire OAuth callbacks + REST endpoints
@@ -50,6 +39,7 @@ defer social.Stop()    // drain scheduler + delivery worker on shutdown
 mcpSrv := forgemcp.New(app,
     forgemcp.WithModule(social.PostModule()),
     forgemcp.WithModule(social.CredentialModule()),
+    forgemcp.WithModule(social.ConfigModule()),     // create_platform_config (Admin)
     forgemcp.WithModule(social.ScheduleModule()),   // slot-queue (v0.4.0+)
 )
 
@@ -58,6 +48,10 @@ social.AddRoutes(app,
     forgesocial.OnPublish("Post", "https://agent.example.com/hooks/post-published"),
 )
 ```
+
+Platform credentials are stored in the database — no environment variables required after initial setup. Call `create_platform_config` via MCP (Admin role) to configure each platform.
+
+> **Backwards compat:** `Config.Mastodon` and `Config.LinkedIn` are still accepted as fallbacks but are deprecated. A warning is logged at startup when env-var config is present and no DB config exists for that platform.
 
 ---
 
@@ -73,9 +67,9 @@ draft → scheduled → published
 
 Create a post via MCP tool `create_scheduled_post`, set `scheduled_at`, and the scheduler handles the rest. Call `publish_scheduled_post` to publish immediately without waiting.
 
-**Platforms:** `mastodon` (default) or `linkedin`.  
-**Body limits:** Mastodon 500 characters; LinkedIn 3000 characters.  
-**Media:** Set `media_url` to attach an HTTPS image URL.
+**Platforms:** `mastodon` (default), `linkedin`, or `x`.  
+**Body limits:** Mastodon 500 characters; LinkedIn 3000 characters; X 280 characters (returns terminal error if exceeded — not truncated).  
+**Media:** Set `media_url` to attach an HTTPS image URL (Mastodon and LinkedIn only; X media is not supported in v0.5.0).
 
 ---
 
@@ -127,17 +121,27 @@ If the server was offline when a slot fired, the scheduler catches up on the nex
 
 ### Mastodon
 
-1. `create_social_credential` → get a credential ID
-2. Send operator to `GET /oauth/mastodon/start?credential_id={id}`
-3. Operator authorises → callback stores encrypted token
-4. Tokens do not expire — connect once
+1. Call `create_platform_config` (Admin) — set `platform=mastodon`, `client_id`, `client_secret`, `redirect_url`, `instance_url`
+2. Call `create_social_credential` (MCP) → get `redirect_url`
+3. Operator visits `redirect_url` in browser and authorises
+4. Callback stores encrypted token automatically
+5. Tokens do not expire — connect once
 
 ### LinkedIn
 
-1. `create_social_credential` → get a credential ID
-2. Send operator to `GET /oauth/linkedin/start?credential_id={id}`
-3. Operator authorises → callback stores token + person URN
-4. **Tokens expire after 60 days** — repeat OAuth flow to reconnect
+1. Call `create_platform_config` (Admin) — set `platform=linkedin`, `client_id`, `client_secret`, `redirect_url`
+2. Call `create_social_credential` (MCP) with `platform=linkedin` → get `redirect_url`
+3. Operator visits `redirect_url` in browser and authorises
+4. Callback stores token + person URN automatically
+5. **Tokens expire after 60 days** — repeat OAuth flow to reconnect
+
+### X (Twitter) — OAuth 2.0 + PKCE (v0.5.0+)
+
+1. Call `create_platform_config` (Admin) — set `platform=x`, `client_id`, `client_secret`, `redirect_url`
+2. Call `create_social_credential` (MCP) with `platform=x` → get `redirect_url` (contains PKCE challenge — single use)
+3. Operator visits `redirect_url` in browser and authorises
+4. Callback validates PKCE code verifier and stores token automatically
+5. The `code_verifier` is stored server-side; the agent never sees it
 
 OAuth tokens are encrypted at rest with AES-256-GCM, keyed from `Config.Secret`. Never stored in plaintext.
 
@@ -147,12 +151,13 @@ OAuth tokens are encrypted at rest with AES-256-GCM, keyed from `Config.Secret`.
 
 | Tool | Description |
 |------|-------------|
+| `create_platform_config` | Configure OAuth 2.0 app credentials for a platform (Admin) |
 | `create_scheduled_post` | Create a draft post |
 | `list_scheduled_posts` | List posts by status |
 | `publish_scheduled_post` | Publish immediately or retry a failed post |
 | `archive_scheduled_post` | Archive a post |
 | `delete_scheduled_post` | Permanently delete a post |
-| `create_social_credential` | Create a new credential record |
+| `create_social_credential` | Initiate OAuth connect flow; returns `redirect_url` |
 | `list_social_credentials` | List all credentials |
 | `get_social_credential` | Read a credential by ID |
 | `delete_social_credential` | Delete a credential |

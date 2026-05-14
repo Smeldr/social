@@ -255,14 +255,28 @@ func (s *Social) publishNow(ctx context.Context, p ScheduledPost) error {
 // callPlatformPublish dispatches a publish call to the correct platform client
 // based on the post's Platform field.
 func (s *Social) callPlatformPublish(ctx context.Context, p ScheduledPost, cred PlatformCredential) (string, error) {
+	s.mu.RLock()
+	mc := s.mastodon
+	lc := s.linkedin
+	tc := s.twitter
+	s.mu.RUnlock()
+
 	switch p.Platform {
 	case "mastodon":
-		return s.mastodon.publish(ctx, p, cred)
+		if mc == nil {
+			return "", &publishError{msg: "Mastodon is not configured on this server", terminal: true}
+		}
+		return mc.publish(ctx, p, cred)
 	case "linkedin":
-		if s.linkedin == nil {
+		if lc == nil {
 			return "", &publishError{msg: "LinkedIn is not configured on this server", terminal: true}
 		}
-		return s.linkedin.publish(ctx, p, cred)
+		return lc.publish(ctx, p, cred)
+	case "x":
+		if tc == nil {
+			return "", &publishError{msg: "X is not configured on this server", terminal: true}
+		}
+		return tc.publish(ctx, p, cred)
 	default:
 		return "", &publishError{msg: "unknown platform: " + p.Platform, terminal: true}
 	}

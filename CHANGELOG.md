@@ -1,5 +1,26 @@
 # forge-social Changelog
 
+## [0.5.0] — 2026-05-14
+
+### Added
+
+- **DB-driven platform config** (`forge_social_platform_config` table): operator-supplied OAuth 2.0 app credentials stored encrypted (AES-256-GCM) in the database, configurable without shell access
+- `create_platform_config` MCP tool (Admin role): stores client_id, client_secret, redirect_url, instance_url (Mastodon), success_url per platform. Returns a confirmation — never returns stored credentials
+- `Social.ConfigModule()`: wire the create_platform_config tool via `forgemcp.WithModule(social.ConfigModule())`
+- **X (Twitter) integration**: OAuth 2.0 with PKCE (`S256`); `GET /oauth/x/callback` route; `POST /2/tweets` publishing; 280-character limit enforced at publish time
+- PKCE support: `code_verifier` stored in `forge_social_oauth_states` during the X OAuth dance — agents see only the authorization URL
+- `connect_social_credential` extended: `platform: "x"` generates PKCE pair and returns the X authorization URL
+- Platform enum extended to `mastodon | linkedin | x` in all relevant MCP tools
+
+### Changed
+
+- `MastodonConfig` and `LinkedInConfig` in `forgesocial.Config` are now deprecated fallbacks. DB config (set via `create_platform_config`) takes priority. A deprecation warning is logged at startup when env-var config is used.
+- `callPlatformPublish` now reads platform clients under a `sync.RWMutex` — allows `create_platform_config` to hot-swap clients without a restart
+
+### Fixed
+
+- Mastodon: `callPlatformPublish` no longer panics when Mastodon is not configured (returns terminal error instead)
+
 ## [0.4.1] — 2026-05-13
 
 ### Fixed
