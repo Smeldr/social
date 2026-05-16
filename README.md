@@ -3,7 +3,7 @@
 Social post scheduling and AI agent routing for [Forge](https://forge-cms.dev) applications.
 
 [![Go Reference](https://pkg.go.dev/badge/forge-cms.dev/forge-social.svg)](https://pkg.go.dev/forge-cms.dev/forge-social)
-**v0.5.2 — stable.** See [CHANGELOG.md](CHANGELOG.md).
+**v0.6.0 — stable.** See [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 go get forge-cms.dev/forge-social@latest

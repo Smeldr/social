@@ -9,15 +9,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"time"
 )
 
 const (
-	xAPIBase       = "https://api.twitter.com"
-	xAuthBase      = "https://twitter.com"
-	xMaxBodyLength = 280
+	xAPIBase        = "https://api.twitter.com"
+	xMediaUploadURL = "https://api.x.com/2/media/upload"
+	xAuthBase       = "https://twitter.com"
+	xMaxBodyLength  = 280
 
 	// xTokenExpiryBuffer is the window before expiry within which an X access
 	// token is proactively refreshed. X tokens expire after 2 hours; refreshing
@@ -69,7 +71,7 @@ func (c *twitterClient) authURL(state, codeChallenge string) string {
 	v.Set("response_type", "code")
 	v.Set("client_id", c.cfg.ClientID)
 	v.Set("redirect_uri", c.cfg.RedirectURL)
-	v.Set("scope", "tweet.read users.read tweet.write offline.access")
+	v.Set("scope", "tweet.read users.read tweet.write media.write offline.access")
 	v.Set("state", state)
 	v.Set("code_challenge", codeChallenge)
 	v.Set("code_challenge_method", "S256")
@@ -91,6 +93,98 @@ type xTweetResponse struct {
 		ID   string `json:"id"`
 		Text string `json:"text"`
 	} `json:"data"`
+}
+
+// xTweetPayload is the JSON body for POST /2/tweets.
+type xTweetPayload struct {
+	Text  string       `json:"text"`
+	Media *xTweetMedia `json:"media,omitempty"`
+}
+
+// xTweetMedia carries the media_ids attachment for a tweet.
+type xTweetMedia struct {
+	MediaIDs []string `json:"media_ids"`
+}
+
+// xMediaUploadResponse is the partial JSON payload returned by POST /2/media/upload.
+type xMediaUploadResponse struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// uploadXMedia fetches the image at mediaURL and uploads it to the X v2 media
+// upload endpoint. Returns the media ID string to attach to a tweet.
+// Existing X credentials must be re-authorised with the media.write scope for
+// this to succeed — tokens issued before this scope was added will fail with 403.
+func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaURL string) (string, error) {
+	// Fetch the image bytes.
+	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("forgesocial: X fetch media: %w", err)
+	}
+	imgResp, err := client.Do(imgReq)
+	if err != nil {
+		return "", fmt.Errorf("forgesocial: X fetch media: %w", err)
+	}
+	defer imgResp.Body.Close()
+	if imgResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("forgesocial: X fetch media: HTTP %d", imgResp.StatusCode)
+	}
+	contentType := imgResp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	imgBytes, err := io.ReadAll(io.LimitReader(imgResp.Body, 10<<20)) // 10 MB cap
+	if err != nil {
+		return "", fmt.Errorf("forgesocial: X fetch media read: %w", err)
+	}
+
+	// Build multipart body.
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("media_category", "tweet_image"); err != nil {
+		return "", fmt.Errorf("forgesocial: X media multipart: %w", err)
+	}
+	h := make(map[string][]string)
+	h["Content-Disposition"] = []string{`form-data; name="media"; filename="upload"`}
+	h["Content-Type"] = []string{contentType}
+	fw, err := mw.CreatePart(h)
+	if err != nil {
+		return "", fmt.Errorf("forgesocial: X media multipart: %w", err)
+	}
+	if _, err := io.Copy(fw, bytes.NewReader(imgBytes)); err != nil {
+		return "", fmt.Errorf("forgesocial: X media multipart write: %w", err)
+	}
+	mw.Close()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, xMediaUploadURL, &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("forgesocial: X upload media: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return "", &publishError{
+			statusCode: resp.StatusCode,
+			msg:        fmt.Sprintf("X upload media: HTTP %d: %s", resp.StatusCode, truncate(string(body), 256)),
+			terminal:   isTerminalStatus(resp.StatusCode),
+		}
+	}
+
+	var mr xMediaUploadResponse
+	if err := json.Unmarshal(body, &mr); err != nil {
+		return "", fmt.Errorf("forgesocial: X upload media parse: %w", err)
+	}
+	return mr.Data.ID, nil
 }
 
 // exchangeCode exchanges an authorization code for an access token using PKCE.
@@ -178,7 +272,9 @@ func (c *twitterClient) refreshXToken(ctx context.Context, refreshTok string) (x
 }
 
 // publish posts a tweet to X. The post body must not exceed xMaxBodyLength (280)
-// characters. Media attachments are not supported in this version.
+// characters. If p.MediaURL is set, the image is uploaded first via uploadXMedia
+// and attached to the tweet. Requires the media.write scope on the access token —
+// existing credentials must be re-authorised to pick up this scope.
 // Returns the platform tweet ID on success.
 func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred PlatformCredential) (string, error) {
 	if len([]rune(p.Body)) > xMaxBodyLength {
@@ -188,7 +284,16 @@ func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred Platf
 		}
 	}
 
-	payload, err := json.Marshal(map[string]string{"text": p.Body})
+	tweetPayload := xTweetPayload{Text: p.Body}
+	if p.MediaURL != "" {
+		mediaID, err := uploadXMedia(ctx, c.httpClient, cred.accessToken, p.MediaURL)
+		if err != nil {
+			return "", fmt.Errorf("forgesocial: X media upload: %w", err)
+		}
+		tweetPayload.Media = &xTweetMedia{MediaIDs: []string{mediaID}}
+	}
+
+	payload, err := json.Marshal(tweetPayload)
 	if err != nil {
 		return "", err
 	}

@@ -1,5 +1,12 @@
 # forge-social Changelog
 
+## [0.6.0] — 2026-05-16
+
+### Added
+
+- X (Twitter): images attached via `media_url` are now uploaded to the X v2 media endpoint before tweeting. The `media_id` is attached to the tweet payload so the image appears inline. Previously `media_url` was silently ignored for X posts.
+- X OAuth scope updated to include `media.write`. **Existing X credentials must be re-authorised** (re-run the OAuth flow) to pick up this scope — tokens issued before this release will fail with 403 on media upload.
+
 ## [0.5.2] — 2026-05-14
 
 ### Fixed
