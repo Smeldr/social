@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // ─── scheduleModule — MCPModule for PublicationSchedule ──────────────────────

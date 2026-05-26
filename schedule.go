@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // ScheduleStatus represents whether a PublicationSchedule is actively firing.

@@ -4,7 +4,7 @@
 //
 // # Quick start
 //
-//	import forgesocial "forge-cms.dev/forge-social"
+//	import forgesocial "smeldr.dev/social"
 //
 //	social := forgesocial.New(db, forgesocial.Config{
 //	    Secret: cfg.Secret,
@@ -41,7 +41,7 @@ import (
 	"net/http"
 	"sync"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // Config holds the configuration for a Social instance.

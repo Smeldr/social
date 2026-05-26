@@ -3,7 +3,7 @@ package forgesocial_test
 import (
 	"testing"
 
-	forgesocial "forge-cms.dev/forge-social"
+	forgesocial "smeldr.dev/social"
 )
 
 func TestValidateAgentURL_AcceptsPublicHTTPS(t *testing.T) {

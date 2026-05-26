@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // Router holds the registered routes and the route delivery worker.

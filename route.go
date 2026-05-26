@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // Route associates a lifecycle signal and content type with an agent URL.

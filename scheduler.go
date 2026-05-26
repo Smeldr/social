@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // schedulerFallbackInterval is the maximum time the scheduler waits between

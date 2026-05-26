@@ -14,7 +14,7 @@ import (
 	"io"
 	"time"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // PlatformConfig holds the operator-supplied OAuth 2.0 app credentials for a

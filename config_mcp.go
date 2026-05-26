@@ -3,7 +3,7 @@ package forgesocial
 import (
 	"time"
 
-	forge "forge-cms.dev/forge"
+	forge "smeldr.dev/forge"
 )
 
 // configModule implements [forge.MCPModule] for platform configuration.

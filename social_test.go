@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	forge "forge-cms.dev/forge"
-	forgesocial "forge-cms.dev/forge-social"
+	forge "smeldr.dev/forge"
+	forgesocial "smeldr.dev/social"
 
 	_ "modernc.org/sqlite"
 )
