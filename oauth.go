@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	forge "smeldr.dev/forge"
+	forge "smeldr.dev/core"
 )
 
 // oauthStateTTL is the maximum age of an OAuth state token.

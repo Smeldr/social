@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	forge "smeldr.dev/forge"
+	forge "smeldr.dev/core"
 )
 
 // CreateTables creates all forge_social_* database tables and indexes.

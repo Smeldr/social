@@ -13,7 +13,7 @@ import (
 	"io"
 	"time"
 
-	forge "smeldr.dev/forge"
+	forge "smeldr.dev/core"
 )
 
 // PlatformCredential stores OAuth 2.0 credentials for a social platform.

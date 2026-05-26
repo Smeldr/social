@@ -41,7 +41,7 @@ import (
 	"net/http"
 	"sync"
 
-	forge "smeldr.dev/forge"
+	forge "smeldr.dev/core"
 )
 
 // Config holds the configuration for a Social instance.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	forge "smeldr.dev/forge"
+	forge "smeldr.dev/core"
 )
 
 // ─── postModule — MCPModule for ScheduledPost ─────────────────────────────────

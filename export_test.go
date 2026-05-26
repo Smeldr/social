@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	forge "smeldr.dev/forge"
+	forge "smeldr.dev/core"
 )
 
 // Export internal functions for white-box testing.

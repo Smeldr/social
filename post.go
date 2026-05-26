@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	forge "smeldr.dev/forge"
+	forge "smeldr.dev/core"
 )
 
 // PostStatus represents the lifecycle state of a ScheduledPost.
