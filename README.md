@@ -122,7 +122,7 @@ If the server was offline when a slot fired, the scheduler catches up on the nex
 
 ### Mastodon
 
-1. Call `create_platform_config` (Admin) — set `platform=mastodon`, `client_id`, `client_secret`, `redirect_url`, `instance_url`
+1. Call `create_platform_config` (Admin) — set `platform=mastodon`, `client_id`, `client_secret`, `redirect_url`, `instance_url`. Optional: `scope` (space-separated, default `"write:statuses write:media"`)
 2. Call `create_social_credential` (MCP) → get `redirect_url`
 3. Operator visits `redirect_url` in browser and authorises
 4. Callback stores encrypted token automatically

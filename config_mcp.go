@@ -1,6 +1,7 @@
 package forgesocial
 
 import (
+	"strings"
 	"time"
 
 	"smeldr.dev/core"
@@ -68,6 +69,13 @@ func (m *configModule) MCPSchema() []smeldr.MCPField {
 			Required:    false,
 			Description: "Optional URL to redirect the browser to after a successful OAuth callback. If empty, a plain HTML confirmation is shown.",
 		},
+		{
+			Name:        "Scope",
+			JSONName:    "scope",
+			Type:        "string",
+			Required:    false,
+			Description: `Optional: space-separated OAuth 2.0 scopes to request. Mastodon default: "write:statuses write:media". Only applies to Mastodon.`,
+		},
 	}
 }
 
@@ -117,12 +125,18 @@ func (m *configModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, 
 		return nil, smeldr.Err("instance_url", "required for platform='mastodon'")
 	}
 
+	var scopes []string
+	if s := stringField(fields, "scope"); s != "" {
+		scopes = strings.Fields(s)
+	}
+
 	cfg := PlatformConfig{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
 		InstanceURL:  instanceURL,
 		SuccessURL:   stringField(fields, "success_url"),
+		Scopes:       scopes,
 	}
 	if err := m.social.platformCfgs.save(platform, cfg); err != nil {
 		return nil, err
