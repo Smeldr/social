@@ -361,12 +361,16 @@ func (m *credentialModule) MCPCreate(_ smeldr.Context, fields map[string]any) (a
 		if instanceURL == "" {
 			return nil, smeldr.Err("instance_url", "required for platform='mastodon'")
 		}
+		verifier, challenge, err := generatePKCE()
+		if err != nil {
+			return nil, err
+		}
 		state := smeldr.NewID()
-		if err := insertOAuthState(m.social.creds.db, state, "mastodon", ""); err != nil {
+		if err := insertOAuthState(m.social.creds.db, state, "mastodon", verifier); err != nil {
 			return nil, err
 		}
 		return map[string]any{
-			"redirect_url": m.social.mastodon.authURL(state),
+			"redirect_url": m.social.mastodon.authURL(state, challenge),
 			"message":      "Visit redirect_url in a browser to authorise Mastodon. The credential will be saved automatically after authorisation.",
 		}, nil
 

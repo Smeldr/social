@@ -81,7 +81,7 @@ func (s *Social) handleMastodonCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	platform, _, err := consumeOAuthState(s.creds.db, state)
+	platform, codeVerifier, err := consumeOAuthState(s.creds.db, state)
 	if err != nil {
 		http.Error(w, "invalid or expired OAuth state", http.StatusBadRequest)
 		return
@@ -91,7 +91,7 @@ func (s *Social) handleMastodonCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tr, err := s.mastodon.exchangeCode(r.Context(), code)
+	tr, err := s.mastodon.exchangeCode(r.Context(), code, codeVerifier)
 	if err != nil {
 		http.Error(w, "token exchange failed: "+err.Error(), http.StatusBadGateway)
 		return
