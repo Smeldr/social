@@ -71,7 +71,7 @@ func (c *twitterClient) authURL(state, codeChallenge string) string {
 	v.Set("response_type", "code")
 	v.Set("client_id", c.cfg.ClientID)
 	v.Set("redirect_uri", c.cfg.RedirectURL)
-	v.Set("scope", "tweet.read users.read tweet.write media.write offline.access")
+	v.Set("scope", "tweet.read users.read tweet.write offline.access")
 	v.Set("state", state)
 	v.Set("code_challenge", codeChallenge)
 	v.Set("code_challenge_method", "S256")
@@ -113,10 +113,8 @@ type xMediaUploadResponse struct {
 	} `json:"data"`
 }
 
-// uploadXMedia fetches the image at mediaURL and uploads it to the X v2 media
+// uploadXMedia fetches the image at mediaURL and uploads it to the X v1.1 media
 // upload endpoint. Returns the media ID string to attach to a tweet.
-// Existing X credentials must be re-authorised with the media.write scope for
-// this to succeed — tokens issued before this scope was added will fail with 403.
 func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaURL string) (string, error) {
 	// Fetch the image bytes.
 	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil)
@@ -273,8 +271,7 @@ func (c *twitterClient) refreshXToken(ctx context.Context, refreshTok string) (x
 
 // publish posts a tweet to X. The post body must not exceed xMaxBodyLength (280)
 // characters. If p.MediaURL is set, the image is uploaded first via uploadXMedia
-// and attached to the tweet. Requires the media.write scope on the access token —
-// existing credentials must be re-authorised to pick up this scope.
+// and attached to the tweet.
 // Returns the platform tweet ID on success.
 func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred PlatformCredential) (string, error) {
 	if len([]rune(p.Body)) > xMaxBodyLength {
