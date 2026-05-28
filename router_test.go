@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 	forgesocial "smeldr.dev/social"
 
 	_ "modernc.org/sqlite"
@@ -33,7 +33,7 @@ func TestAddRoutes_EmptyRoutesIsNoop(t *testing.T) {
 	})
 	defer social.Stop()
 
-	// newFakeApp satisfies *forge.App without a real server.
+	// newFakeApp satisfies *smeldr.App without a real server.
 	// AddRoutes with no routes should be a no-op.
 	// We just verify Stop() doesn't hang.
 	done := make(chan struct{})
@@ -84,7 +84,7 @@ func TestRouteJobStore_EnqueueAndPoll(t *testing.T) {
 	store := forgesocial.NewRouteJobStoreForTest(db)
 
 	route := forgesocial.OnPublish("Post", "https://agent.example.com/hook")
-	ev := forge.SignalEvent{
+	ev := smeldr.SignalEvent{
 		Type:      "Post",
 		Slug:      "my-post",
 		Title:     "My Post",
@@ -92,7 +92,7 @@ func TestRouteJobStore_EnqueueAndPoll(t *testing.T) {
 		Timestamp: time.Now().UTC(),
 	}
 
-	store.EnqueueForTest(route, forge.AfterPublish, ev)
+	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	jobs, err := store.DueJobsForTest(context.Background())
 	if err != nil {
@@ -118,8 +118,8 @@ func TestRouteJobStore_MarkDelivered(t *testing.T) {
 	store := forgesocial.NewRouteJobStoreForTest(db)
 
 	route := forgesocial.OnPublish("Story", "https://agent.example.com/hook")
-	ev := forge.SignalEvent{Type: "Story", Slug: "s1", Timestamp: time.Now().UTC()}
-	store.EnqueueForTest(route, forge.AfterPublish, ev)
+	ev := smeldr.SignalEvent{Type: "Story", Slug: "s1", Timestamp: time.Now().UTC()}
+	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	jobs, _ := store.DueJobsForTest(context.Background())
 	if len(jobs) != 1 {

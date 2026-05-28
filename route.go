@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // Route associates a lifecycle signal and content type with an agent URL.
@@ -18,7 +18,7 @@ import (
 // [OnDelete] to construct Route values.
 type Route struct {
 	// Signal is the Forge lifecycle signal this route responds to.
-	Signal forge.Signal
+	Signal smeldr.Signal
 
 	// ContentType is the Go type name of the content type (e.g. "Post", "Story").
 	// Matching is exact. Use the PascalCase struct name exactly as it appears
@@ -30,29 +30,29 @@ type Route struct {
 	AgentURL string
 }
 
-// OnPublish returns a [Route] that fires on [forge.AfterPublish] for the
+// OnPublish returns a [Route] that fires on [smeldr.AfterPublish] for the
 // named content type. agentURL must be a public HTTPS URL (validated at
 // [AddRoutes] time).
 func OnPublish(contentType, agentURL string) Route {
-	return Route{Signal: forge.AfterPublish, ContentType: contentType, AgentURL: agentURL}
+	return Route{Signal: smeldr.AfterPublish, ContentType: contentType, AgentURL: agentURL}
 }
 
-// OnSchedule returns a [Route] that fires on [forge.AfterSchedule] for the
+// OnSchedule returns a [Route] that fires on [smeldr.AfterSchedule] for the
 // named content type.
 func OnSchedule(contentType, agentURL string) Route {
-	return Route{Signal: forge.AfterSchedule, ContentType: contentType, AgentURL: agentURL}
+	return Route{Signal: smeldr.AfterSchedule, ContentType: contentType, AgentURL: agentURL}
 }
 
-// OnArchive returns a [Route] that fires on [forge.AfterArchive] for the
+// OnArchive returns a [Route] that fires on [smeldr.AfterArchive] for the
 // named content type.
 func OnArchive(contentType, agentURL string) Route {
-	return Route{Signal: forge.AfterArchive, ContentType: contentType, AgentURL: agentURL}
+	return Route{Signal: smeldr.AfterArchive, ContentType: contentType, AgentURL: agentURL}
 }
 
-// OnDelete returns a [Route] that fires on [forge.AfterDelete] for the
+// OnDelete returns a [Route] that fires on [smeldr.AfterDelete] for the
 // named content type.
 func OnDelete(contentType, agentURL string) Route {
-	return Route{Signal: forge.AfterDelete, ContentType: contentType, AgentURL: agentURL}
+	return Route{Signal: smeldr.AfterDelete, ContentType: contentType, AgentURL: agentURL}
 }
 
 // validateRoute panics if the route is structurally invalid. Called once at

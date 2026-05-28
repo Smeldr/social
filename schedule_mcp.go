@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // ─── scheduleModule — MCPModule for PublicationSchedule ──────────────────────
 
-// scheduleModule implements [forge.MCPModule] for [PublicationSchedule].
+// scheduleModule implements [smeldr.MCPModule] for [PublicationSchedule].
 // Obtain it via [Social.ScheduleModule].
 type scheduleModule struct {
 	social *Social
@@ -20,17 +20,17 @@ type scheduleModule struct {
 // TypeName "PublicationSchedule" produces tools named create_publication_schedule,
 // list_publication_schedules, get_publication_schedule,
 // update_publication_schedule, delete_publication_schedule.
-func (m *scheduleModule) MCPMeta() forge.MCPMeta {
-	return forge.MCPMeta{
+func (m *scheduleModule) MCPMeta() smeldr.MCPMeta {
+	return smeldr.MCPMeta{
 		Prefix:     "/social/schedules",
 		TypeName:   "PublicationSchedule",
-		Operations: []forge.MCPOperation{forge.MCPRead, forge.MCPWrite},
+		Operations: []smeldr.MCPOperation{smeldr.MCPRead, smeldr.MCPWrite},
 	}
 }
 
 // MCPSchema returns the field schema for PublicationSchedule create/update.
-func (m *scheduleModule) MCPSchema() []forge.MCPField {
-	return []forge.MCPField{
+func (m *scheduleModule) MCPSchema() []smeldr.MCPField {
+	return []smeldr.MCPField{
 		{
 			Name:        "CredentialID",
 			JSONName:    "credential_id",
@@ -57,7 +57,7 @@ func (m *scheduleModule) MCPSchema() []forge.MCPField {
 }
 
 // MCPList returns all PublicationSchedules as []any.
-func (m *scheduleModule) MCPList(_ forge.Context, _ ...forge.Status) ([]any, error) {
+func (m *scheduleModule) MCPList(_ smeldr.Context, _ ...smeldr.Status) ([]any, error) {
 	schedules, err := listSchedules(m.social.db)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (m *scheduleModule) MCPList(_ forge.Context, _ ...forge.Status) ([]any, err
 }
 
 // MCPGet returns the PublicationSchedule with the given slug (= ID).
-func (m *scheduleModule) MCPGet(_ forge.Context, slug string) (any, error) {
+func (m *scheduleModule) MCPGet(_ smeldr.Context, slug string) (any, error) {
 	s, err := getSchedule(m.social.db, slug)
 	if err != nil {
 		return nil, err
@@ -80,19 +80,19 @@ func (m *scheduleModule) MCPGet(_ forge.Context, slug string) (any, error) {
 
 // MCPCreate creates a new PublicationSchedule for the given credential.
 // The slots field must be a valid JSON array of Slot objects.
-func (m *scheduleModule) MCPCreate(_ forge.Context, fields map[string]any) (any, error) {
+func (m *scheduleModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, error) {
 	credentialID, _ := fields["credential_id"].(string)
 	if credentialID == "" {
-		return nil, forge.Err("credential_id", "required")
+		return nil, smeldr.Err("credential_id", "required")
 	}
 	slotsRaw, _ := fields["slots"].(string)
 	if slotsRaw == "" {
-		return nil, forge.Err("slots", "required — JSON array of slot objects")
+		return nil, smeldr.Err("slots", "required — JSON array of slot objects")
 	}
 
 	var slots []Slot
 	if err := json.Unmarshal([]byte(slotsRaw), &slots); err != nil {
-		return nil, forge.Err("slots", fmt.Sprintf("must be a valid JSON array: %v", err))
+		return nil, smeldr.Err("slots", fmt.Sprintf("must be a valid JSON array: %v", err))
 	}
 	if err := validateSlots(slots); err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (m *scheduleModule) MCPCreate(_ forge.Context, fields map[string]any) (any,
 
 	now := time.Now().UTC()
 	s := PublicationSchedule{
-		ID:           forge.NewID(),
+		ID:           smeldr.NewID(),
 		CredentialID: credentialID,
 		Slots:        slots,
 		Status:       status,
@@ -120,7 +120,7 @@ func (m *scheduleModule) MCPCreate(_ forge.Context, fields map[string]any) (any,
 
 // MCPUpdate applies a partial update to the PublicationSchedule with the given slug.
 // Supports updating slots and status.
-func (m *scheduleModule) MCPUpdate(_ forge.Context, slug string, fields map[string]any) (any, error) {
+func (m *scheduleModule) MCPUpdate(_ smeldr.Context, slug string, fields map[string]any) (any, error) {
 	s, err := getSchedule(m.social.db, slug)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (m *scheduleModule) MCPUpdate(_ forge.Context, slug string, fields map[stri
 	if slotsRaw, ok := fields["slots"].(string); ok {
 		var slots []Slot
 		if err := json.Unmarshal([]byte(slotsRaw), &slots); err != nil {
-			return nil, forge.Err("slots", fmt.Sprintf("must be a valid JSON array: %v", err))
+			return nil, smeldr.Err("slots", fmt.Sprintf("must be a valid JSON array: %v", err))
 		}
 		if err := validateSlots(slots); err != nil {
 			return nil, err
@@ -142,7 +142,7 @@ func (m *scheduleModule) MCPUpdate(_ forge.Context, slug string, fields map[stri
 		case ScheduleStatusActive, ScheduleStatusPaused:
 			s.Status = ScheduleStatus(v)
 		default:
-			return nil, forge.Err("status", "must be 'active' or 'paused'")
+			return nil, smeldr.Err("status", "must be 'active' or 'paused'")
 		}
 	}
 
@@ -153,22 +153,22 @@ func (m *scheduleModule) MCPUpdate(_ forge.Context, slug string, fields map[stri
 }
 
 // MCPPublish is not supported for PublicationSchedule — it has no lifecycle.
-func (m *scheduleModule) MCPPublish(_ forge.Context, _ string) error {
-	return forge.ErrBadRequest
+func (m *scheduleModule) MCPPublish(_ smeldr.Context, _ string) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPSchedule is not supported for PublicationSchedule.
-func (m *scheduleModule) MCPSchedule(_ forge.Context, _ string, _ time.Time) error {
-	return forge.ErrBadRequest
+func (m *scheduleModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPArchive is not supported for PublicationSchedule.
-func (m *scheduleModule) MCPArchive(_ forge.Context, _ string) error {
-	return forge.ErrBadRequest
+func (m *scheduleModule) MCPArchive(_ smeldr.Context, _ string) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPDelete permanently deletes the PublicationSchedule with the given slug.
-func (m *scheduleModule) MCPDelete(_ forge.Context, slug string) error {
+func (m *scheduleModule) MCPDelete(_ smeldr.Context, slug string) error {
 	return deleteSchedule(m.social.db, slug)
 }
 
@@ -176,17 +176,17 @@ func (m *scheduleModule) MCPDelete(_ forge.Context, slug string) error {
 func validateSlots(slots []Slot) error {
 	for i, slot := range slots {
 		if slot.Timezone == "" {
-			return forge.Err("slots", fmt.Sprintf("slot %d: timezone is required (IANA name, e.g. \"Europe/Copenhagen\")", i))
+			return smeldr.Err("slots", fmt.Sprintf("slot %d: timezone is required (IANA name, e.g. \"Europe/Copenhagen\")", i))
 		}
 		if slot.Weekday < 0 || slot.Weekday > 6 {
-			return forge.Err("slots", fmt.Sprintf("slot %d: weekday must be 0–6 (0=Sunday)", i))
+			return smeldr.Err("slots", fmt.Sprintf("slot %d: weekday must be 0–6 (0=Sunday)", i))
 		}
 		var h, min int
 		if _, err := fmt.Sscanf(slot.Time, "%d:%d", &h, &min); err != nil || h < 0 || h > 23 || min < 0 || min > 59 {
-			return forge.Err("slots", fmt.Sprintf("slot %d: time must be HH:MM (24-hour), got %q", i, slot.Time))
+			return smeldr.Err("slots", fmt.Sprintf("slot %d: time must be HH:MM (24-hour), got %q", i, slot.Time))
 		}
 		if _, err := time.LoadLocation(slot.Timezone); err != nil {
-			return forge.Err("slots", fmt.Sprintf("slot %d: timezone %q is not a valid IANA name", i, slot.Timezone))
+			return smeldr.Err("slots", fmt.Sprintf("slot %d: timezone %q is not a valid IANA name", i, slot.Timezone))
 		}
 	}
 	return nil

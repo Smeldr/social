@@ -5,29 +5,29 @@ import (
 	"fmt"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // ─── postModule — MCPModule for ScheduledPost ─────────────────────────────────
 
-// postModule implements [forge.MCPModule] for [ScheduledPost].
+// postModule implements [smeldr.MCPModule] for [ScheduledPost].
 // Obtain it via [Social.PostModule].
 type postModule struct {
 	social *Social
 }
 
 // MCPMeta returns the MCP registration metadata for ScheduledPost.
-func (m *postModule) MCPMeta() forge.MCPMeta {
-	return forge.MCPMeta{
+func (m *postModule) MCPMeta() smeldr.MCPMeta {
+	return smeldr.MCPMeta{
 		Prefix:     "/social/posts",
 		TypeName:   "ScheduledPost",
-		Operations: []forge.MCPOperation{forge.MCPRead, forge.MCPWrite},
+		Operations: []smeldr.MCPOperation{smeldr.MCPRead, smeldr.MCPWrite},
 	}
 }
 
 // MCPSchema returns the field schema for ScheduledPost.
-func (m *postModule) MCPSchema() []forge.MCPField {
-	return []forge.MCPField{
+func (m *postModule) MCPSchema() []smeldr.MCPField {
+	return []smeldr.MCPField{
 		{
 			Name:        "CredentialID",
 			JSONName:    "credential_id",
@@ -84,8 +84,8 @@ func (m *postModule) MCPSchema() []forge.MCPField {
 }
 
 // MCPList returns all ScheduledPost rows as []any.
-// Lifecycle status filter maps forge.Status values: Published→published, Draft→draft, etc.
-func (m *postModule) MCPList(_ forge.Context, statuses ...forge.Status) ([]any, error) {
+// Lifecycle status filter maps smeldr.Status values: Published→published, Draft→draft, etc.
+func (m *postModule) MCPList(_ smeldr.Context, statuses ...smeldr.Status) ([]any, error) {
 	var ps []PostStatus
 	for _, s := range statuses {
 		ps = append(ps, PostStatus(string(s)))
@@ -102,7 +102,7 @@ func (m *postModule) MCPList(_ forge.Context, statuses ...forge.Status) ([]any, 
 }
 
 // MCPGet returns the ScheduledPost with the given slug (= ID).
-func (m *postModule) MCPGet(_ forge.Context, slug string) (any, error) {
+func (m *postModule) MCPGet(_ smeldr.Context, slug string) (any, error) {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return nil, err
@@ -113,14 +113,14 @@ func (m *postModule) MCPGet(_ forge.Context, slug string) (any, error) {
 // MCPCreate creates a new ScheduledPost with status=draft.
 // If scheduled_at is provided, status is automatically set to "scheduled".
 // The platform field selects the publishing target (default: "mastodon").
-func (m *postModule) MCPCreate(_ forge.Context, fields map[string]any) (any, error) {
+func (m *postModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, error) {
 	credentialID, _ := fields["credential_id"].(string)
 	if credentialID == "" {
-		return nil, forge.Err("credential_id", "required")
+		return nil, smeldr.Err("credential_id", "required")
 	}
 	body, _ := fields["body"].(string)
 	if body == "" {
-		return nil, forge.Err("body", "required")
+		return nil, smeldr.Err("body", "required")
 	}
 
 	platform := stringField(fields, "platform")
@@ -128,12 +128,12 @@ func (m *postModule) MCPCreate(_ forge.Context, fields map[string]any) (any, err
 		platform = "mastodon" // backward-compatible default
 	}
 	if platform != "mastodon" && platform != "linkedin" && platform != "x" {
-		return nil, forge.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
+		return nil, smeldr.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
 	}
 
 	now := time.Now().UTC()
 	p := ScheduledPost{
-		ID:           forge.NewID(),
+		ID:           smeldr.NewID(),
 		Platform:     platform,
 		CredentialID: credentialID,
 		Body:         body,
@@ -145,13 +145,13 @@ func (m *postModule) MCPCreate(_ forge.Context, fields map[string]any) (any, err
 	}
 
 	if p.MediaURL != "" && p.AltText == "" {
-		return nil, forge.Err("alt_text", "required when media_url is set")
+		return nil, smeldr.Err("alt_text", "required when media_url is set")
 	}
 
 	if raw, ok := fields["scheduled_at"].(string); ok && raw != "" {
 		t, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
-			return nil, forge.Err("scheduled_at", "must be RFC3339 datetime")
+			return nil, smeldr.Err("scheduled_at", "must be RFC3339 datetime")
 		}
 		utc := t.UTC()
 		p.ScheduledAt = &utc
@@ -167,13 +167,13 @@ func (m *postModule) MCPCreate(_ forge.Context, fields map[string]any) (any, err
 // MCPUpdate applies a partial update to the ScheduledPost with the given slug.
 // Only fields present in the fields map are changed. Published or failed posts
 // cannot be updated.
-func (m *postModule) MCPUpdate(_ forge.Context, slug string, fields map[string]any) (any, error) {
+func (m *postModule) MCPUpdate(_ smeldr.Context, slug string, fields map[string]any) (any, error) {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return nil, err
 	}
 	if p.Status == PostStatusPublished || p.Status == PostStatusFailed {
-		return nil, forge.Err("status", fmt.Sprintf("cannot update a %s post", p.Status))
+		return nil, smeldr.Err("status", fmt.Sprintf("cannot update a %s post", p.Status))
 	}
 
 	if v, ok := fields["body"].(string); ok {
@@ -195,7 +195,7 @@ func (m *postModule) MCPUpdate(_ forge.Context, slug string, fields map[string]a
 		} else {
 			t, err := time.Parse(time.RFC3339, raw)
 			if err != nil {
-				return nil, forge.Err("scheduled_at", "must be RFC3339 datetime")
+				return nil, smeldr.Err("scheduled_at", "must be RFC3339 datetime")
 			}
 			utc := t.UTC()
 			p.ScheduledAt = &utc
@@ -207,7 +207,7 @@ func (m *postModule) MCPUpdate(_ forge.Context, slug string, fields map[string]a
 		case PostStatusDraft, PostStatusScheduled, PostStatusQueued, PostStatusArchived:
 			p.Status = PostStatus(v)
 		default:
-			return nil, forge.Err("status", "must be draft, scheduled, queued, or archived")
+			return nil, smeldr.Err("status", "must be draft, scheduled, queued, or archived")
 		}
 	}
 
@@ -217,7 +217,7 @@ func (m *postModule) MCPUpdate(_ forge.Context, slug string, fields map[string]a
 	}
 
 	if p.MediaURL != "" && p.AltText == "" {
-		return nil, forge.Err("alt_text", "required when media_url is set")
+		return nil, smeldr.Err("alt_text", "required when media_url is set")
 	}
 
 	if err := updatePost(m.social.db, p); err != nil {
@@ -228,28 +228,28 @@ func (m *postModule) MCPUpdate(_ forge.Context, slug string, fields map[string]a
 
 // MCPPublish publishes the ScheduledPost immediately, bypassing the scheduler.
 // This is the "publish_now" operation.
-func (m *postModule) MCPPublish(ctx forge.Context, slug string) error {
+func (m *postModule) MCPPublish(ctx smeldr.Context, slug string) error {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return err
 	}
 	if p.Status == PostStatusPublished {
-		return forge.Err("status", "post is already published")
+		return smeldr.Err("status", "post is already published")
 	}
 	if p.Status == PostStatusArchived {
-		return forge.Err("status", "archived posts cannot be published")
+		return smeldr.Err("status", "archived posts cannot be published")
 	}
 	return m.social.publishNow(context.Background(), p)
 }
 
 // MCPSchedule sets the ScheduledPost to publish at the given time.
-func (m *postModule) MCPSchedule(_ forge.Context, slug string, at time.Time) error {
+func (m *postModule) MCPSchedule(_ smeldr.Context, slug string, at time.Time) error {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return err
 	}
 	if p.Status == PostStatusPublished || p.Status == PostStatusArchived {
-		return forge.Err("status", fmt.Sprintf("cannot schedule a %s post", p.Status))
+		return smeldr.Err("status", fmt.Sprintf("cannot schedule a %s post", p.Status))
 	}
 	utc := at.UTC()
 	p.ScheduledAt = &utc
@@ -258,26 +258,26 @@ func (m *postModule) MCPSchedule(_ forge.Context, slug string, at time.Time) err
 }
 
 // MCPArchive transitions the ScheduledPost to archived.
-func (m *postModule) MCPArchive(_ forge.Context, slug string) error {
+func (m *postModule) MCPArchive(_ smeldr.Context, slug string) error {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return err
 	}
 	if p.Status == PostStatusPublished {
-		return forge.Err("status", "published posts cannot be archived via this tool")
+		return smeldr.Err("status", "published posts cannot be archived via this tool")
 	}
 	p.Status = PostStatusArchived
 	return updatePost(m.social.db, p)
 }
 
 // MCPDelete permanently deletes the ScheduledPost.
-func (m *postModule) MCPDelete(_ forge.Context, slug string) error {
+func (m *postModule) MCPDelete(_ smeldr.Context, slug string) error {
 	return deletePost(m.social.db, slug)
 }
 
 // ─── credentialModule — MCPModule for PlatformCredential ──────────────────────
 
-// credentialModule implements [forge.MCPModule] for [PlatformCredential].
+// credentialModule implements [smeldr.MCPModule] for [PlatformCredential].
 // Obtain it via [Social.CredentialModule].
 type credentialModule struct {
 	social *Social
@@ -286,17 +286,17 @@ type credentialModule struct {
 // MCPMeta returns the MCP registration metadata for PlatformCredential.
 // TypeName "SocialCredential" produces tools named create_social_credential,
 // list_social_credentials, etc.
-func (m *credentialModule) MCPMeta() forge.MCPMeta {
-	return forge.MCPMeta{
+func (m *credentialModule) MCPMeta() smeldr.MCPMeta {
+	return smeldr.MCPMeta{
 		Prefix:     "/social/credentials",
 		TypeName:   "SocialCredential",
-		Operations: []forge.MCPOperation{forge.MCPRead, forge.MCPWrite},
+		Operations: []smeldr.MCPOperation{smeldr.MCPRead, smeldr.MCPWrite},
 	}
 }
 
 // MCPSchema returns the field schema for the credential create (OAuth connect) operation.
-func (m *credentialModule) MCPSchema() []forge.MCPField {
-	return []forge.MCPField{
+func (m *credentialModule) MCPSchema() []smeldr.MCPField {
+	return []smeldr.MCPField{
 		{
 			Name:        "Platform",
 			JSONName:    "platform",
@@ -316,7 +316,7 @@ func (m *credentialModule) MCPSchema() []forge.MCPField {
 }
 
 // MCPList returns all PlatformCredentials as []any. Token fields are omitted.
-func (m *credentialModule) MCPList(_ forge.Context, _ ...forge.Status) ([]any, error) {
+func (m *credentialModule) MCPList(_ smeldr.Context, _ ...smeldr.Status) ([]any, error) {
 	creds, err := m.social.creds.listCredentials()
 	if err != nil {
 		return nil, err
@@ -330,7 +330,7 @@ func (m *credentialModule) MCPList(_ forge.Context, _ ...forge.Status) ([]any, e
 
 // MCPGet returns the PlatformCredential with the given slug (= ID).
 // Token fields are omitted from the response.
-func (m *credentialModule) MCPGet(_ forge.Context, slug string) (any, error) {
+func (m *credentialModule) MCPGet(_ smeldr.Context, slug string) (any, error) {
 	// Use listCredentials and find by ID to avoid returning decrypted tokens.
 	creds, err := m.social.creds.listCredentials()
 	if err != nil {
@@ -341,7 +341,7 @@ func (m *credentialModule) MCPGet(_ forge.Context, slug string) (any, error) {
 			return c, nil
 		}
 	}
-	return nil, forge.ErrNotFound
+	return nil, smeldr.ErrNotFound
 }
 
 // MCPCreate initiates the platform OAuth 2.0 flow for the given platform
@@ -350,18 +350,18 @@ func (m *credentialModule) MCPGet(_ forge.Context, slug string) (any, error) {
 //
 // The actual credential is not created until the OAuth callback completes at
 // GET /oauth/{platform}/callback.
-func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (any, error) {
+func (m *credentialModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, error) {
 	platform, _ := fields["platform"].(string)
 	switch platform {
 	case "mastodon":
 		if m.social.mastodon == nil {
-			return nil, forge.Err("platform", "Mastodon is not configured on this server")
+			return nil, smeldr.Err("platform", "Mastodon is not configured on this server")
 		}
 		instanceURL, _ := fields["instance_url"].(string)
 		if instanceURL == "" {
-			return nil, forge.Err("instance_url", "required for platform='mastodon'")
+			return nil, smeldr.Err("instance_url", "required for platform='mastodon'")
 		}
-		state := forge.NewID()
+		state := smeldr.NewID()
 		if err := insertOAuthState(m.social.creds.db, state, "mastodon", ""); err != nil {
 			return nil, err
 		}
@@ -372,9 +372,9 @@ func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (an
 
 	case "linkedin":
 		if m.social.linkedin == nil {
-			return nil, forge.Err("platform", "LinkedIn is not configured on this server")
+			return nil, smeldr.Err("platform", "LinkedIn is not configured on this server")
 		}
-		state := forge.NewID()
+		state := smeldr.NewID()
 		if err := insertOAuthState(m.social.creds.db, state, "linkedin", ""); err != nil {
 			return nil, err
 		}
@@ -388,13 +388,13 @@ func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (an
 		tc := m.social.twitter
 		m.social.mu.RUnlock()
 		if tc == nil {
-			return nil, forge.Err("platform", "X is not configured on this server — use configure_platform first")
+			return nil, smeldr.Err("platform", "X is not configured on this server — use configure_platform first")
 		}
 		verifier, challenge, err := generatePKCE()
 		if err != nil {
 			return nil, err
 		}
-		state := forge.NewID()
+		state := smeldr.NewID()
 		if err := insertOAuthState(m.social.creds.db, state, "x", verifier); err != nil {
 			return nil, err
 		}
@@ -404,33 +404,33 @@ func (m *credentialModule) MCPCreate(_ forge.Context, fields map[string]any) (an
 		}, nil
 
 	default:
-		return nil, forge.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
+		return nil, smeldr.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
 	}
 }
 
 // MCPUpdate is not supported for credentials — use MCPCreate to reconnect.
-func (m *credentialModule) MCPUpdate(_ forge.Context, _ string, _ map[string]any) (any, error) {
-	return nil, forge.ErrBadRequest
+func (m *credentialModule) MCPUpdate(_ smeldr.Context, _ string, _ map[string]any) (any, error) {
+	return nil, smeldr.ErrBadRequest
 }
 
 // MCPPublish is not supported for credentials — they have no lifecycle.
-func (m *credentialModule) MCPPublish(_ forge.Context, _ string) error {
-	return forge.ErrBadRequest
+func (m *credentialModule) MCPPublish(_ smeldr.Context, _ string) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPSchedule is not supported for credentials.
-func (m *credentialModule) MCPSchedule(_ forge.Context, _ string, _ time.Time) error {
-	return forge.ErrBadRequest
+func (m *credentialModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPArchive is not supported for credentials.
-func (m *credentialModule) MCPArchive(_ forge.Context, _ string) error {
-	return forge.ErrBadRequest
+func (m *credentialModule) MCPArchive(_ smeldr.Context, _ string) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPDelete permanently removes the credential.
 // Posts that reference this credential will fail to publish after deletion.
-func (m *credentialModule) MCPDelete(_ forge.Context, slug string) error {
+func (m *credentialModule) MCPDelete(_ smeldr.Context, slug string) error {
 	return m.social.creds.deleteCredential(slug)
 }
 

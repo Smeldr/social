@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // schedulerFallbackInterval is the maximum time the scheduler waits between
@@ -153,7 +153,7 @@ func (sc *scheduler) processSlotQueue(ctx context.Context) {
 					return
 				}
 				p, err := dequeueOldestQueued(sc.social.db, sched.CredentialID)
-				if errors.Is(err, forge.ErrNotFound) {
+				if errors.Is(err, smeldr.ErrNotFound) {
 					break // queue empty for this credential
 				}
 				if err != nil {

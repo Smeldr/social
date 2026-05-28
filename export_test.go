@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // Export internal functions for white-box testing.
@@ -31,12 +31,12 @@ type RouteJobStoreForTest struct {
 }
 
 // NewRouteJobStoreForTest creates a RouteJobStoreForTest backed by db.
-func NewRouteJobStoreForTest(db forge.DB) *RouteJobStoreForTest {
+func NewRouteJobStoreForTest(db smeldr.DB) *RouteJobStoreForTest {
 	return &RouteJobStoreForTest{inner: &routeJobStore{db: db}}
 }
 
 // EnqueueForTest enqueues one job for the given route, signal, and event.
-func (s *RouteJobStoreForTest) EnqueueForTest(r Route, sig forge.Signal, ev forge.SignalEvent) {
+func (s *RouteJobStoreForTest) EnqueueForTest(r Route, sig smeldr.Signal, ev smeldr.SignalEvent) {
 	s.inner.enqueue(r, sig, ev)
 }
 
@@ -53,7 +53,7 @@ func (s *RouteJobStoreForTest) MarkDeliveredForTest(ctx context.Context, id stri
 // RunDeliveryForTest runs one delivery pass: fetches due jobs from db and
 // delivers each one using the provided http.Client and secret.
 // Designed for use in tests with httptest.Server clients.
-func RunDeliveryForTest(db forge.DB, secret []byte, hc *http.Client) {
+func RunDeliveryForTest(db smeldr.DB, secret []byte, hc *http.Client) {
 	store := &routeJobStore{db: db}
 	router := &Router{
 		jobs:   store,
@@ -72,7 +72,7 @@ func RunDeliveryForTest(db forge.DB, secret []byte, hc *http.Client) {
 }
 
 // GetFailedJobsForTest returns all route jobs with status='failed'.
-func GetFailedJobsForTest(db forge.DB) []routeJob {
+func GetFailedJobsForTest(db smeldr.DB) []routeJob {
 	rows, err := db.QueryContext(context.Background(),
 		`SELECT id, signal, content_type, agent_url, payload, status, attempts, next_attempt, last_error, created_at
 		 FROM forge_social_route_jobs WHERE status = 'failed'`)

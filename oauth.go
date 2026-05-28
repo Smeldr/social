@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // oauthStateTTL is the maximum age of an OAuth state token.
@@ -18,7 +18,7 @@ const oauthStateTTL = 10 * time.Minute
 // insertOAuthState stores a new OAuth state token for the given platform.
 // codeVerifier holds the PKCE verifier for platforms that require it (X);
 // pass an empty string for Mastodon and LinkedIn.
-func insertOAuthState(db forge.DB, state, platform, codeVerifier string) error {
+func insertOAuthState(db smeldr.DB, state, platform, codeVerifier string) error {
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_oauth_states (state, platform, code_verifier, created_at)
 		VALUES (?, ?, ?, ?)`,
@@ -31,7 +31,7 @@ func insertOAuthState(db forge.DB, state, platform, codeVerifier string) error {
 // Returns the platform and code_verifier associated with the state,
 // or an error if the state is unknown or older than oauthStateTTL.
 // code_verifier is empty for platforms that do not use PKCE (Mastodon, LinkedIn).
-func consumeOAuthState(db forge.DB, state string) (platform, codeVerifier string, err error) {
+func consumeOAuthState(db smeldr.DB, state string) (platform, codeVerifier string, err error) {
 	var createdAt time.Time
 	err = db.QueryRowContext(context.Background(), `
 		SELECT platform, code_verifier, created_at FROM forge_social_oauth_states WHERE state=?`, state,
@@ -57,7 +57,7 @@ func consumeOAuthState(db forge.DB, state string) (platform, codeVerifier string
 
 // purgeExpiredOAuthStates removes state rows older than oauthStateTTL.
 // Called periodically to prevent table bloat.
-func purgeExpiredOAuthStates(db forge.DB) error {
+func purgeExpiredOAuthStates(db smeldr.DB) error {
 	cutoff := time.Now().UTC().Add(-oauthStateTTL)
 	_, err := db.ExecContext(context.Background(),
 		`DELETE FROM forge_social_oauth_states WHERE created_at < ?`, cutoff)

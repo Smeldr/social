@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // ScheduleStatus represents whether a PublicationSchedule is actively firing.
@@ -51,7 +51,7 @@ func (ps PublicationSchedule) GetSlug() string { return ps.ID }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 
-func insertSchedule(db forge.DB, s PublicationSchedule) error {
+func insertSchedule(db smeldr.DB, s PublicationSchedule) error {
 	slotsJSON, err := json.Marshal(s.Slots)
 	if err != nil {
 		return fmt.Errorf("forgesocial: marshal slots: %w", err)
@@ -66,7 +66,7 @@ func insertSchedule(db forge.DB, s PublicationSchedule) error {
 	return err
 }
 
-func updateSchedule(db forge.DB, s PublicationSchedule) error {
+func updateSchedule(db smeldr.DB, s PublicationSchedule) error {
 	slotsJSON, err := json.Marshal(s.Slots)
 	if err != nil {
 		return fmt.Errorf("forgesocial: marshal slots: %w", err)
@@ -81,7 +81,7 @@ func updateSchedule(db forge.DB, s PublicationSchedule) error {
 }
 
 // updateScheduleLastTick records the last time the scheduler ticked this schedule.
-func updateScheduleLastTick(db forge.DB, id string, t time.Time) error {
+func updateScheduleLastTick(db smeldr.DB, id string, t time.Time) error {
 	_, err := db.ExecContext(context.Background(), `
 		UPDATE forge_social_publication_schedules
 		SET last_tick_at=?, updated_at=?
@@ -91,13 +91,13 @@ func updateScheduleLastTick(db forge.DB, id string, t time.Time) error {
 	return err
 }
 
-func getSchedule(db forge.DB, id string) (PublicationSchedule, error) {
+func getSchedule(db smeldr.DB, id string) (PublicationSchedule, error) {
 	return scanSchedule(db.QueryRowContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
 		FROM forge_social_publication_schedules WHERE id=?`, id))
 }
 
-func listSchedules(db forge.DB) ([]PublicationSchedule, error) {
+func listSchedules(db smeldr.DB) ([]PublicationSchedule, error) {
 	rows, err := db.QueryContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
 		FROM forge_social_publication_schedules
@@ -119,7 +119,7 @@ func listSchedules(db forge.DB) ([]PublicationSchedule, error) {
 }
 
 // listActiveSchedules returns all schedules with status='active'.
-func listActiveSchedules(db forge.DB) ([]PublicationSchedule, error) {
+func listActiveSchedules(db smeldr.DB) ([]PublicationSchedule, error) {
 	rows, err := db.QueryContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
 		FROM forge_social_publication_schedules
@@ -141,7 +141,7 @@ func listActiveSchedules(db forge.DB) ([]PublicationSchedule, error) {
 	return out, rows.Err()
 }
 
-func deleteSchedule(db forge.DB, id string) error {
+func deleteSchedule(db smeldr.DB, id string) error {
 	res, err := db.ExecContext(context.Background(),
 		`DELETE FROM forge_social_publication_schedules WHERE id=?`, id)
 	if err != nil {
@@ -149,14 +149,14 @@ func deleteSchedule(db forge.DB, id string) error {
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return forge.ErrNotFound
+		return smeldr.ErrNotFound
 	}
 	return nil
 }
 
 // dequeueOldestQueued returns the oldest queued post for credentialID, or
-// forge.ErrNotFound if the queue is empty.
-func dequeueOldestQueued(db forge.DB, credentialID string) (ScheduledPost, error) {
+// smeldr.ErrNotFound if the queue is empty.
+func dequeueOldestQueued(db smeldr.DB, credentialID string) (ScheduledPost, error) {
 	var p ScheduledPost
 	var scheduledAt sql.NullTime
 	err := db.QueryRowContext(context.Background(), `
@@ -172,7 +172,7 @@ func dequeueOldestQueued(db forge.DB, credentialID string) (ScheduledPost, error
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return p, forge.ErrNotFound
+		return p, smeldr.ErrNotFound
 	}
 	if err != nil {
 		return p, err
@@ -232,7 +232,7 @@ func scanSchedule(row *sql.Row) (PublicationSchedule, error) {
 	var lastTick sql.NullTime
 	err := row.Scan(&s.ID, &s.CredentialID, &slotsJSON, &s.Status, &lastTick, &s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return s, forge.ErrNotFound
+		return s, smeldr.ErrNotFound
 	}
 	if err != nil {
 		return s, err

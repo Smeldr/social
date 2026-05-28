@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // PostStatus represents the lifecycle state of a ScheduledPost.
@@ -51,7 +51,7 @@ type ScheduledPost struct {
 func (p ScheduledPost) GetSlug() string { return p.ID }
 
 // insertPost inserts a new ScheduledPost row.
-func insertPost(db forge.DB, p ScheduledPost) error {
+func insertPost(db smeldr.DB, p ScheduledPost) error {
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_posts
 			(id, platform, credential_id, body, media_url, alt_text,
@@ -65,7 +65,7 @@ func insertPost(db forge.DB, p ScheduledPost) error {
 }
 
 // updatePost applies a full row update (all mutable fields) to the post with p.ID.
-func updatePost(db forge.DB, p ScheduledPost) error {
+func updatePost(db smeldr.DB, p ScheduledPost) error {
 	_, err := db.ExecContext(context.Background(), `
 		UPDATE forge_social_posts
 		SET body=?, media_url=?, alt_text=?, scheduled_at=?, status=?,
@@ -79,7 +79,7 @@ func updatePost(db forge.DB, p ScheduledPost) error {
 }
 
 // markPostPublished sets status=published, platform_post_id, and updated_at.
-func markPostPublished(db forge.DB, id, platformPostID string) error {
+func markPostPublished(db smeldr.DB, id, platformPostID string) error {
 	_, err := db.ExecContext(context.Background(), `
 		UPDATE forge_social_posts
 		SET status='published', platform_post_id=?, error_msg='', updated_at=?
@@ -90,7 +90,7 @@ func markPostPublished(db forge.DB, id, platformPostID string) error {
 }
 
 // markPostFailed sets status=failed and error_msg.
-func markPostFailed(db forge.DB, id, errMsg string) error {
+func markPostFailed(db smeldr.DB, id, errMsg string) error {
 	_, err := db.ExecContext(context.Background(), `
 		UPDATE forge_social_posts
 		SET status='failed', error_msg=?, updated_at=?
@@ -101,8 +101,8 @@ func markPostFailed(db forge.DB, id, errMsg string) error {
 }
 
 // getPost returns the ScheduledPost with the given id.
-// Returns forge.ErrNotFound when no row exists.
-func getPost(db forge.DB, id string) (ScheduledPost, error) {
+// Returns smeldr.ErrNotFound when no row exists.
+func getPost(db smeldr.DB, id string) (ScheduledPost, error) {
 	var p ScheduledPost
 	var scheduledAt sql.NullTime
 	err := db.QueryRowContext(context.Background(), `
@@ -115,7 +115,7 @@ func getPost(db forge.DB, id string) (ScheduledPost, error) {
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return p, forge.ErrNotFound
+		return p, smeldr.ErrNotFound
 	}
 	if err != nil {
 		return p, err
@@ -129,7 +129,7 @@ func getPost(db forge.DB, id string) (ScheduledPost, error) {
 
 // listPosts returns all ScheduledPost rows, ordered by created_at DESC.
 // If statuses is non-empty, only rows with a matching status are returned.
-func listPosts(db forge.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
+func listPosts(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 	query := `
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
@@ -175,8 +175,8 @@ func listPosts(db forge.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 }
 
 // deletePost permanently removes the post with the given id.
-// Returns forge.ErrNotFound when no row exists.
-func deletePost(db forge.DB, id string) error {
+// Returns smeldr.ErrNotFound when no row exists.
+func deletePost(db smeldr.DB, id string) error {
 	res, err := db.ExecContext(context.Background(),
 		`DELETE FROM forge_social_posts WHERE id=?`, id)
 	if err != nil {
@@ -184,14 +184,14 @@ func deletePost(db forge.DB, id string) error {
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return forge.ErrNotFound
+		return smeldr.ErrNotFound
 	}
 	return nil
 }
 
 // duePosts returns all scheduled posts whose scheduled_at is in the past.
 // These are the posts the scheduler should publish next.
-func duePosts(db forge.DB) ([]ScheduledPost, error) {
+func duePosts(db smeldr.DB) ([]ScheduledPost, error) {
 	rows, err := db.QueryContext(context.Background(), `
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
@@ -227,7 +227,7 @@ func duePosts(db forge.DB) ([]ScheduledPost, error) {
 
 // nextScheduledAt returns the earliest scheduled_at among all scheduled posts,
 // or nil if no scheduled posts exist.
-func nextScheduledAt(db forge.DB) (*time.Time, error) {
+func nextScheduledAt(db smeldr.DB) (*time.Time, error) {
 	var t sql.NullTime
 	err := db.QueryRowContext(context.Background(), `
 		SELECT MIN(scheduled_at)
@@ -245,18 +245,18 @@ func nextScheduledAt(db forge.DB) (*time.Time, error) {
 }
 
 // logDeliveryAttempt records a publish attempt in forge_social_delivery_log.
-func logDeliveryAttempt(db forge.DB, postID string, attempt, statusCode int, errMsg string) error {
+func logDeliveryAttempt(db smeldr.DB, postID string, attempt, statusCode int, errMsg string) error {
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_delivery_log
 			(id, post_id, attempt, status_code, error, attempted_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
-		forge.NewID(), postID, attempt, statusCode, errMsg, time.Now().UTC(),
+		smeldr.NewID(), postID, attempt, statusCode, errMsg, time.Now().UTC(),
 	)
 	return err
 }
 
 // deliveryAttemptCount returns the number of previous delivery attempts for postID.
-func deliveryAttemptCount(db forge.DB, postID string) (int, error) {
+func deliveryAttemptCount(db smeldr.DB, postID string) (int, error) {
 	var n int
 	err := db.QueryRowContext(context.Background(),
 		`SELECT COUNT(*) FROM forge_social_delivery_log WHERE post_id=?`, postID,

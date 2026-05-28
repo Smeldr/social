@@ -13,7 +13,7 @@ import (
 	"io"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // PlatformCredential stores OAuth 2.0 credentials for a social platform.
@@ -42,11 +42,11 @@ type PlatformCredential struct {
 // credentialStore provides DB helpers for PlatformCredential.
 // It holds the AES-256-GCM key derived from Config.Secret.
 type credentialStore struct {
-	db     forge.DB
+	db     smeldr.DB
 	appKey [32]byte
 }
 
-func newCredentialStore(db forge.DB, secret []byte) *credentialStore {
+func newCredentialStore(db smeldr.DB, secret []byte) *credentialStore {
 	key := sha256.Sum256(secret)
 	return &credentialStore{db: db, appKey: key}
 }
@@ -133,7 +133,7 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 	}
 
 	// Insert new credential.
-	id := forge.NewID()
+	id := smeldr.NewID()
 	_, err = cs.db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_credentials
 			(id, platform, name, instance_url, actor_id, access_token, refresh_token, expires_at, created_at, updated_at)
@@ -146,7 +146,7 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 }
 
 // getCredential returns a credential by ID with decrypted tokens.
-// Returns forge.ErrNotFound when no row exists.
+// Returns smeldr.ErrNotFound when no row exists.
 func (cs *credentialStore) getCredential(id string) (PlatformCredential, error) {
 	var c PlatformCredential
 	var encAccess, encRefresh string
@@ -161,7 +161,7 @@ func (cs *credentialStore) getCredential(id string) (PlatformCredential, error) 
 		&expiresAt, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return c, forge.ErrNotFound
+		return c, smeldr.ErrNotFound
 	}
 	if err != nil {
 		return c, err
@@ -214,7 +214,7 @@ func (cs *credentialStore) listCredentials() ([]PlatformCredential, error) {
 }
 
 // deleteCredential permanently removes a credential row.
-// Returns forge.ErrNotFound when no row exists.
+// Returns smeldr.ErrNotFound when no row exists.
 func (cs *credentialStore) deleteCredential(id string) error {
 	res, err := cs.db.ExecContext(context.Background(),
 		`DELETE FROM forge_social_credentials WHERE id=?`, id)
@@ -223,7 +223,7 @@ func (cs *credentialStore) deleteCredential(id string) error {
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return forge.ErrNotFound
+		return smeldr.ErrNotFound
 	}
 	return nil
 }

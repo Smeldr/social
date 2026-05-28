@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 	forgesocial "smeldr.dev/social"
 )
 
@@ -26,23 +26,23 @@ func TestRouteWorker_Delivers2xx(t *testing.T) {
 	store := forgesocial.NewRouteJobStoreForTest(db)
 
 	route := forgesocial.Route{
-		Signal:      forge.AfterPublish,
+		Signal:      smeldr.AfterPublish,
 		ContentType: "Post",
 		AgentURL:    srv.URL,
 	}
-	ev := forge.SignalEvent{
+	ev := smeldr.SignalEvent{
 		Type:      "Post",
 		Slug:      "test-post",
 		Timestamp: time.Now().UTC(),
 	}
-	store.EnqueueForTest(route, forge.AfterPublish, ev)
+	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	// Run delivery directly via the exported helper.
 	forgesocial.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
 
 	select {
 	case body := <-received:
-		var got forge.SignalEvent
+		var got smeldr.SignalEvent
 		if err := json.Unmarshal(body, &got); err != nil {
 			t.Fatalf("unmarshal payload: %v", err)
 		}
@@ -71,12 +71,12 @@ func TestRouteWorker_Marks4xxTerminal(t *testing.T) {
 	store := forgesocial.NewRouteJobStoreForTest(db)
 
 	route := forgesocial.Route{
-		Signal:      forge.AfterPublish,
+		Signal:      smeldr.AfterPublish,
 		ContentType: "Post",
 		AgentURL:    srv.URL,
 	}
-	ev := forge.SignalEvent{Type: "Post", Slug: "bad-post", Timestamp: time.Now().UTC()}
-	store.EnqueueForTest(route, forge.AfterPublish, ev)
+	ev := smeldr.SignalEvent{Type: "Post", Slug: "bad-post", Timestamp: time.Now().UTC()}
+	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	forgesocial.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
 
@@ -101,12 +101,12 @@ func TestRouteWorker_Retries5xx(t *testing.T) {
 	store := forgesocial.NewRouteJobStoreForTest(db)
 
 	route := forgesocial.Route{
-		Signal:      forge.AfterPublish,
+		Signal:      smeldr.AfterPublish,
 		ContentType: "Post",
 		AgentURL:    srv.URL,
 	}
-	ev := forge.SignalEvent{Type: "Post", Slug: "server-error", Timestamp: time.Now().UTC()}
-	store.EnqueueForTest(route, forge.AfterPublish, ev)
+	ev := smeldr.SignalEvent{Type: "Post", Slug: "server-error", Timestamp: time.Now().UTC()}
+	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	forgesocial.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
 
@@ -128,9 +128,9 @@ func TestRouteWorker_SignatureHeader(t *testing.T) {
 
 	db := openRouterTestDB(t)
 	store := forgesocial.NewRouteJobStoreForTest(db)
-	route := forgesocial.Route{Signal: forge.AfterPublish, ContentType: "Post", AgentURL: srv.URL}
-	ev := forge.SignalEvent{Type: "Post", Slug: "sig-test", Timestamp: time.Now().UTC()}
-	store.EnqueueForTest(route, forge.AfterPublish, ev)
+	route := forgesocial.Route{Signal: smeldr.AfterPublish, ContentType: "Post", AgentURL: srv.URL}
+	ev := smeldr.SignalEvent{Type: "Post", Slug: "sig-test", Timestamp: time.Now().UTC()}
+	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	secret := []byte("test-secret-32-bytes-long-padded!")
 	forgesocial.RunDeliveryForTest(db, secret, srv.Client())

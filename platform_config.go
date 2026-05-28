@@ -14,7 +14,7 @@ import (
 	"io"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // PlatformConfig holds the operator-supplied OAuth 2.0 app credentials for a
@@ -34,11 +34,11 @@ type PlatformConfig struct {
 // Config blobs are encrypted with AES-256-GCM using a key derived from
 // the application secret.
 type platformConfigStore struct {
-	db     forge.DB
+	db     smeldr.DB
 	appKey [32]byte
 }
 
-func newPlatformConfigStore(db forge.DB, secret []byte) *platformConfigStore {
+func newPlatformConfigStore(db smeldr.DB, secret []byte) *platformConfigStore {
 	key := sha256.Sum256(secret)
 	return &platformConfigStore{db: db, appKey: key}
 }

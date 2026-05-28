@@ -41,13 +41,13 @@ import (
 	"net/http"
 	"sync"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // Config holds the configuration for a Social instance.
 type Config struct {
 	// Secret is the application's Config.Secret, used to derive the AES-256-GCM
-	// key for encrypting stored OAuth tokens. Must match the forge.App's secret.
+	// key for encrypting stored OAuth tokens. Must match the smeldr.App's secret.
 	Secret []byte
 	// Mastodon holds the Mastodon OAuth 2.0 client credentials.
 	Mastodon MastodonConfig
@@ -61,7 +61,7 @@ type Config struct {
 // Optionally register agent routes with [AddRoutes] for Layer 1 routing.
 // Call [Stop] in your application's shutdown handler.
 type Social struct {
-	db           forge.DB
+	db           smeldr.DB
 	cfg          Config
 	creds        *credentialStore
 	platformCfgs *platformConfigStore
@@ -75,7 +75,7 @@ type Social struct {
 
 // New creates a Social instance backed by db. It panics if db is nil,
 // if Config.Secret is empty, or if the database tables cannot be created.
-func New(db forge.DB, cfg Config) *Social {
+func New(db smeldr.DB, cfg Config) *Social {
 	if db == nil {
 		panic("forgesocial.New: db is nil")
 	}
@@ -143,7 +143,7 @@ func New(db forge.DB, cfg Config) *Social {
 //	GET /oauth/x/callback        — OAuth 2.0 + PKCE callback from X (when configured)
 //
 // Call [Social.Stop] in your shutdown handler to drain the scheduler.
-func (s *Social) Register(app *forge.App) {
+func (s *Social) Register(app *smeldr.App) {
 	app.Handle("GET /oauth/mastodon/callback", http.HandlerFunc(s.handleMastodonCallback))
 	if s.linkedin != nil {
 		app.Handle("GET /oauth/linkedin/callback", http.HandlerFunc(s.handleLinkedInCallback))
@@ -162,32 +162,32 @@ func (s *Social) Stop() {
 	}
 }
 
-// PostModule returns a [forge.MCPModule] that exposes [ScheduledPost] as MCP
+// PostModule returns a [smeldr.MCPModule] that exposes [ScheduledPost] as MCP
 // tools (create, update, publish, archive, delete, list, get).
 // Pass it to forgemcp.WithModule when wiring the MCP server.
-func (s *Social) PostModule() forge.MCPModule {
+func (s *Social) PostModule() smeldr.MCPModule {
 	return &postModule{social: s}
 }
 
-// CredentialModule returns a [forge.MCPModule] that exposes [PlatformCredential]
+// CredentialModule returns a [smeldr.MCPModule] that exposes [PlatformCredential]
 // as MCP tools (create/connect, list, get, delete).
 // Pass it to forgemcp.WithModule when wiring the MCP server.
-func (s *Social) CredentialModule() forge.MCPModule {
+func (s *Social) CredentialModule() smeldr.MCPModule {
 	return &credentialModule{social: s}
 }
 
-// ScheduleModule returns a [forge.MCPModule] that exposes [PublicationSchedule]
+// ScheduleModule returns a [smeldr.MCPModule] that exposes [PublicationSchedule]
 // as MCP tools (create, update, get, list, delete).
 // Pass it to forgemcp.WithModule when wiring the MCP server.
-func (s *Social) ScheduleModule() forge.MCPModule {
+func (s *Social) ScheduleModule() smeldr.MCPModule {
 	return &scheduleModule{social: s}
 }
 
-// ConfigModule returns a [forge.MCPModule] that exposes the configure_platform
+// ConfigModule returns a [smeldr.MCPModule] that exposes the configure_platform
 // admin tool for storing per-platform OAuth 2.0 app credentials in the DB.
 // Pass it to forgemcp.WithModule when wiring the MCP server.
 // Only users with Admin role can call the configure_platform tool.
-func (s *Social) ConfigModule() forge.MCPModule {
+func (s *Social) ConfigModule() smeldr.MCPModule {
 	return &configModule{social: s}
 }
 

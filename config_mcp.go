@@ -3,10 +3,10 @@ package forgesocial
 import (
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
-// configModule implements [forge.MCPModule] for platform configuration.
+// configModule implements [smeldr.MCPModule] for platform configuration.
 // It exposes a single write tool: create_platform_config (Admin role).
 // Obtain it via [Social.ConfigModule].
 type configModule struct {
@@ -14,17 +14,17 @@ type configModule struct {
 }
 
 // MCPMeta returns the MCP registration metadata for platform configuration.
-func (m *configModule) MCPMeta() forge.MCPMeta {
-	return forge.MCPMeta{
+func (m *configModule) MCPMeta() smeldr.MCPMeta {
+	return smeldr.MCPMeta{
 		Prefix:     "/social/config",
 		TypeName:   "PlatformConfig",
-		Operations: []forge.MCPOperation{forge.MCPWrite},
+		Operations: []smeldr.MCPOperation{smeldr.MCPWrite},
 	}
 }
 
 // MCPSchema returns the field schema for the configure_platform tool.
-func (m *configModule) MCPSchema() []forge.MCPField {
-	return []forge.MCPField{
+func (m *configModule) MCPSchema() []smeldr.MCPField {
+	return []smeldr.MCPField{
 		{
 			Name:        "Platform",
 			JSONName:    "platform",
@@ -72,49 +72,49 @@ func (m *configModule) MCPSchema() []forge.MCPField {
 }
 
 // MCPList is not supported — platform config is write-only via MCP.
-func (m *configModule) MCPList(_ forge.Context, _ ...forge.Status) ([]any, error) {
-	return nil, forge.ErrBadRequest
+func (m *configModule) MCPList(_ smeldr.Context, _ ...smeldr.Status) ([]any, error) {
+	return nil, smeldr.ErrBadRequest
 }
 
 // MCPGet is not supported — platform config is write-only via MCP.
-func (m *configModule) MCPGet(_ forge.Context, _ string) (any, error) {
-	return nil, forge.ErrBadRequest
+func (m *configModule) MCPGet(_ smeldr.Context, _ string) (any, error) {
+	return nil, smeldr.ErrBadRequest
 }
 
 // MCPCreate stores the OAuth 2.0 app credentials for a platform.
 // Replaces any existing config for that platform. Returns a confirmation
 // message — never returns the stored credentials.
-func (m *configModule) MCPCreate(_ forge.Context, fields map[string]any) (any, error) {
+func (m *configModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, error) {
 	platform, _ := fields["platform"].(string)
 	switch platform {
 	case "mastodon", "linkedin", "x":
 	default:
-		return nil, forge.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
+		return nil, smeldr.Err("platform", "must be 'mastodon', 'linkedin', or 'x'")
 	}
 
 	// X has a single fixed API endpoint — instance_url is not applicable.
 	if platform == "x" {
 		if v, _ := fields["instance_url"].(string); v != "" {
-			return nil, forge.Err("instance_url", "not applicable for platform 'x' — X has a single fixed API endpoint")
+			return nil, smeldr.Err("instance_url", "not applicable for platform 'x' — X has a single fixed API endpoint")
 		}
 	}
 
 	clientID, _ := fields["client_id"].(string)
 	if clientID == "" {
-		return nil, forge.Err("client_id", "required")
+		return nil, smeldr.Err("client_id", "required")
 	}
 	clientSecret, _ := fields["client_secret"].(string)
 	if clientSecret == "" {
-		return nil, forge.Err("client_secret", "required")
+		return nil, smeldr.Err("client_secret", "required")
 	}
 	redirectURL, _ := fields["redirect_url"].(string)
 	if redirectURL == "" {
-		return nil, forge.Err("redirect_url", "required")
+		return nil, smeldr.Err("redirect_url", "required")
 	}
 
 	instanceURL := stringField(fields, "instance_url")
 	if platform == "mastodon" && instanceURL == "" {
-		return nil, forge.Err("instance_url", "required for platform='mastodon'")
+		return nil, smeldr.Err("instance_url", "required for platform='mastodon'")
 	}
 
 	cfg := PlatformConfig{
@@ -138,26 +138,26 @@ func (m *configModule) MCPCreate(_ forge.Context, fields map[string]any) (any, e
 }
 
 // MCPUpdate is not supported.
-func (m *configModule) MCPUpdate(_ forge.Context, _ string, _ map[string]any) (any, error) {
-	return nil, forge.ErrBadRequest
+func (m *configModule) MCPUpdate(_ smeldr.Context, _ string, _ map[string]any) (any, error) {
+	return nil, smeldr.ErrBadRequest
 }
 
 // MCPPublish is not supported.
-func (m *configModule) MCPPublish(_ forge.Context, _ string) error {
-	return forge.ErrBadRequest
+func (m *configModule) MCPPublish(_ smeldr.Context, _ string) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPSchedule is not supported.
-func (m *configModule) MCPSchedule(_ forge.Context, _ string, _ time.Time) error {
-	return forge.ErrBadRequest
+func (m *configModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPArchive is not supported.
-func (m *configModule) MCPArchive(_ forge.Context, _ string) error {
-	return forge.ErrBadRequest
+func (m *configModule) MCPArchive(_ smeldr.Context, _ string) error {
+	return smeldr.ErrBadRequest
 }
 
 // MCPDelete is not supported.
-func (m *configModule) MCPDelete(_ forge.Context, _ string) error {
-	return forge.ErrBadRequest
+func (m *configModule) MCPDelete(_ smeldr.Context, _ string) error {
+	return smeldr.ErrBadRequest
 }

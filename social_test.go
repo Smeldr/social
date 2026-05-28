@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 	forgesocial "smeldr.dev/social"
 
 	_ "modernc.org/sqlite"
@@ -26,12 +26,12 @@ func openTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
-// adminCtx returns a forge.Context with Admin role for test calls.
-func adminCtx() forge.Context {
-	return forge.NewTestContext(forge.User{
+// adminCtx returns a smeldr.Context with Admin role for test calls.
+func adminCtx() smeldr.Context {
+	return smeldr.NewTestContext(smeldr.User{
 		ID:    "test-admin",
 		Name:  "Test Admin",
-		Roles: []forge.Role{forge.Admin},
+		Roles: []smeldr.Role{smeldr.Admin},
 	})
 }
 

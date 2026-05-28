@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	forge "smeldr.dev/core"
+	"smeldr.dev/core"
 )
 
 // CreateTables creates all forge_social_* database tables and indexes.
@@ -14,7 +14,7 @@ import (
 //
 // It also applies an idempotent migration that adds the actor_id column to
 // forge_social_credentials for databases created before v0.2.0.
-func CreateTables(db forge.DB) error {
+func CreateTables(db smeldr.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS forge_social_credentials (
 			id            TEXT PRIMARY KEY,
