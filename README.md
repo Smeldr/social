@@ -259,7 +259,7 @@ defer social.Stop()
 
 - Go 1.26+
 - `forge-cms.dev/forge` v1.20.0+
-- A `forge.DB` (SQLite or Postgres)
+- A `smeldr.DB` (SQLite or Postgres)
 
 ---
 
