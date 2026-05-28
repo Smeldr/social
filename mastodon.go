@@ -84,8 +84,9 @@ func (c *mastodonClient) effectiveScope() string {
 }
 
 // authURL builds the Mastodon OAuth 2.0 authorization URL for the given state token.
+// When codeChallenge is non-empty, PKCE parameters (S256) are added to the URL.
 // The user must visit this URL in a browser to authorise the application.
-func (c *mastodonClient) authURL(state string) string {
+func (c *mastodonClient) authURL(state, codeChallenge string) string {
 	params := url.Values{
 		"client_id":     {c.cfg.ClientID},
 		"redirect_uri":  {c.cfg.RedirectURL},
@@ -93,12 +94,17 @@ func (c *mastodonClient) authURL(state string) string {
 		"scope":         {c.effectiveScope()},
 		"state":         {state},
 	}
+	if codeChallenge != "" {
+		params.Set("code_challenge", codeChallenge)
+		params.Set("code_challenge_method", "S256")
+	}
 	return strings.TrimRight(c.cfg.InstanceURL, "/") + "/oauth/authorize?" + strings.ReplaceAll(params.Encode(), "+", "%20")
 }
 
 // exchangeCode exchanges an authorization code for an access token.
+// When codeVerifier is non-empty, it is included as the PKCE verifier.
 // Returns the token response on success.
-func (c *mastodonClient) exchangeCode(ctx context.Context, code string) (mastodonTokenResponse, error) {
+func (c *mastodonClient) exchangeCode(ctx context.Context, code, codeVerifier string) (mastodonTokenResponse, error) {
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -106,6 +112,9 @@ func (c *mastodonClient) exchangeCode(ctx context.Context, code string) (mastodo
 		"client_secret": {c.cfg.ClientSecret},
 		"redirect_uri":  {c.cfg.RedirectURL},
 		"scope":         {c.effectiveScope()},
+	}
+	if codeVerifier != "" {
+		form.Set("code_verifier", codeVerifier)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
