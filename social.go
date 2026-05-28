@@ -102,6 +102,7 @@ func New(db smeldr.DB, cfg Config) *Social {
 			InstanceURL:  dbCfg.InstanceURL,
 			RedirectURL:  dbCfg.RedirectURL,
 			SuccessURL:   dbCfg.SuccessURL,
+			Scopes:       dbCfg.Scopes,
 		})
 	} else if err == nil && cfg.Mastodon.ClientID != "" {
 		log.Println("forgesocial: DEPRECATED: MastodonConfig in forgesocial.Config; use configure_platform MCP tool instead")
@@ -205,6 +206,7 @@ func (s *Social) reloadPlatformClient(platform string, cfg PlatformConfig) {
 			InstanceURL:  cfg.InstanceURL,
 			RedirectURL:  cfg.RedirectURL,
 			SuccessURL:   cfg.SuccessURL,
+			Scopes:       cfg.Scopes,
 		})
 	case "linkedin":
 		s.linkedin = newLinkedinClient(LinkedInConfig{

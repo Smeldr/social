@@ -28,6 +28,10 @@ type PlatformConfig struct {
 	InstanceURL string `json:"instance_url,omitempty"`
 	// SuccessURL is an optional redirect URL shown after a successful OAuth callback.
 	SuccessURL string `json:"success_url,omitempty"`
+	// Scopes is the list of OAuth 2.0 scopes to request during authorisation.
+	// If empty, the platform's default scope is used.
+	// For Mastodon the default is "write:statuses write:media".
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // platformConfigStore persists per-platform OAuth app credentials in the DB.
