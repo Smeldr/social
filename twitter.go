@@ -18,7 +18,7 @@ import (
 const (
 	xAPIBase        = "https://api.twitter.com"
 	xMediaUploadURL = "https://api.x.com/2/media/upload"
-	xAuthBase       = "https://twitter.com"
+	xAuthBase       = "https://x.com"
 	xMaxBodyLength  = 280
 
 	// xTokenExpiryBuffer is the window before expiry within which an X access
