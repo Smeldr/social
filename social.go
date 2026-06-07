@@ -56,7 +56,7 @@ type Config struct {
 	LinkedIn LinkedInConfig
 }
 
-// Social manages platform publishing for a Forge application.
+// Social manages platform publishing for a Smeldr application.
 // Create it with [New] and register its HTTP routes with [Register].
 // Optionally register agent routes with [AddRoutes] for Layer 1 routing.
 // Call [Stop] in your application's shutdown handler.

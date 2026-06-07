@@ -1,5 +1,15 @@
 # smeldr.dev/social Changelog
 
+## [0.8.1] — 2026-06-07
+
+### Changed
+
+- Brand-prose sweep (T101, A135): README "Forge" → "Smeldr" (4 lines) + `verifyForgeSignature`
+  example function renamed to `verifySignature`. Godoc comments in route.go, router.go,
+  social.go updated. No exported-symbol or behaviour change.
+
+---
+
 ## [0.8.0] — 2026-06-06
 
 ### Changed (breaking)

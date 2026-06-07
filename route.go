@@ -11,13 +11,13 @@ import (
 )
 
 // Route associates a lifecycle signal and content type with an agent URL.
-// When Forge fires the matching signal for the matching content type, the
+// When Smeldr fires the matching signal for the matching content type, the
 // Router enqueues an outbound HTTP POST to AgentURL.
 //
 // Use the builder functions [OnPublish], [OnSchedule], [OnArchive], and
 // [OnDelete] to construct Route values.
 type Route struct {
-	// Signal is the Forge lifecycle signal this route responds to.
+	// Signal is the Smeldr lifecycle signal this route responds to.
 	Signal smeldr.Signal
 
 	// ContentType is the Go type name of the content type (e.g. "Post", "Story").

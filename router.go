@@ -128,7 +128,7 @@ func (s *routeJobStore) logAttempt(ctx context.Context, jobID string, attempt, s
 }
 
 // handle returns a signal bus callback for the given signal. It is called from
-// the forge App's signal bus goroutine and must return quickly. It looks up
+// the Smeldr App's signal bus goroutine and must return quickly. It looks up
 // matching routes for (sig, ev.Type) and enqueues one DB job per match.
 func (r *Router) handle(sig smeldr.Signal) func(context.Context, smeldr.SignalEvent) error {
 	return func(_ context.Context, ev smeldr.SignalEvent) error {
@@ -143,7 +143,7 @@ func (r *Router) handle(sig smeldr.Signal) func(context.Context, smeldr.SignalEv
 }
 
 // AddRoutes registers routes on the Social instance and wires each unique
-// signal to the Forge App's signal bus. It also starts the route delivery
+// signal to the Smeldr App's signal bus. It also starts the route delivery
 // worker goroutine.
 //
 // Call AddRoutes before [app.Run]. Panics if any route has an invalid
