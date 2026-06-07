@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"bytes"
@@ -40,7 +40,7 @@ func (r *Router) runWorker() {
 		jobs, err := r.jobs.dueJobs(ctx)
 		cancel()
 		if err != nil {
-			log.Printf("forgesocial: route worker: poll: %v", err)
+			log.Printf("social: route worker: poll: %v", err)
 		}
 
 		for _, j := range jobs {
@@ -100,7 +100,7 @@ func (r *Router) deliver(hc *http.Client, j routeJob) {
 	case code >= 200 && code < 300:
 		r.jobs.logAttempt(ctx, j.ID, attempt, code, "")
 		if err := r.jobs.markDelivered(ctx, j.ID); err != nil {
-			log.Printf("forgesocial: route worker: mark delivered %s: %v", j.ID, err)
+			log.Printf("social: route worker: mark delivered %s: %v", j.ID, err)
 		}
 
 	case code == 429:

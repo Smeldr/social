@@ -1,4 +1,21 @@
-# forge-social Changelog
+# smeldr.dev/social Changelog
+
+## [0.8.0] — 2026-06-06
+
+### Changed (breaking)
+
+- Package renamed `forgesocial` → `social` (T100 Step 4). Update imports from
+  `forgesocial.X` to `social.X` (or drop the alias: `import "smeldr.dev/social"`).
+  Error/panic/log-string prefixes `forgesocial:` → `social:`. No exported symbols
+  changed — only the package qualifier.
+- Updated stale `forge-mcp` doc cross-references to `mcp` (renamed in mcp v1.17.0),
+  and README install/import paths from `forge-cms.dev/forge-social` to
+  `smeldr.dev/social`.
+
+### Preserved
+
+- The 8 `forge_social_*` DB table names are unchanged — renaming them is a separate
+  DB migration, not part of this rename.
 
 ## [0.6.0] — 2026-05-16
 

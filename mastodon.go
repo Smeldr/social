@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"bytes"
@@ -129,47 +129,47 @@ func (c *mastodonClient) exchangeCode(ctx context.Context, code, codeVerifier st
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return mastodonTokenResponse{}, fmt.Errorf("forgesocial: token exchange: %w", err)
+		return mastodonTokenResponse{}, fmt.Errorf("social: token exchange: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		return mastodonTokenResponse{}, fmt.Errorf("forgesocial: token exchange read: %w", err)
+		return mastodonTokenResponse{}, fmt.Errorf("social: token exchange read: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return mastodonTokenResponse{}, fmt.Errorf("forgesocial: token exchange: HTTP %d: %s",
+		return mastodonTokenResponse{}, fmt.Errorf("social: token exchange: HTTP %d: %s",
 			resp.StatusCode, truncate(string(body), 256))
 	}
 
 	var tr mastodonTokenResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
-		return mastodonTokenResponse{}, fmt.Errorf("forgesocial: token exchange parse: %w", err)
+		return mastodonTokenResponse{}, fmt.Errorf("social: token exchange parse: %w", err)
 	}
 	return tr, nil
 }
 
 // uploadMedia uploads a single image to the Mastodon v2 media API and returns
 // the media attachment ID. mediaURL must be an accessible HTTP(S) URL; the
-// image is fetched by forge-social and forwarded as a multipart upload.
+// image is fetched by social and forwarded as a multipart upload.
 func (c *mastodonClient) uploadMedia(ctx context.Context, accessToken, mediaURL, altText string) (string, error) {
 	// Fetch the image bytes.
 	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: fetch media: %w", err)
+		return "", fmt.Errorf("social: fetch media: %w", err)
 	}
 	imgResp, err := c.httpClient.Do(imgReq)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: fetch media: %w", err)
+		return "", fmt.Errorf("social: fetch media: %w", err)
 	}
 	defer imgResp.Body.Close()
 	if imgResp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("forgesocial: fetch media: HTTP %d", imgResp.StatusCode)
+		return "", fmt.Errorf("social: fetch media: HTTP %d", imgResp.StatusCode)
 	}
 	imgBytes, err := io.ReadAll(io.LimitReader(imgResp.Body, 10<<20)) // 10 MB cap
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: fetch media read: %w", err)
+		return "", fmt.Errorf("social: fetch media read: %w", err)
 	}
 
 	// Build multipart body.
@@ -177,7 +177,7 @@ func (c *mastodonClient) uploadMedia(ctx context.Context, accessToken, mediaURL,
 	mw := multipart.NewWriter(&buf)
 	fw, err := mw.CreateFormFile("file", "upload")
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: media multipart: %w", err)
+		return "", fmt.Errorf("social: media multipart: %w", err)
 	}
 	if _, err := io.Copy(fw, bytes.NewReader(imgBytes)); err != nil {
 		return "", err
@@ -199,7 +199,7 @@ func (c *mastodonClient) uploadMedia(ctx context.Context, accessToken, mediaURL,
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: upload media: %w", err)
+		return "", fmt.Errorf("social: upload media: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -214,7 +214,7 @@ func (c *mastodonClient) uploadMedia(ctx context.Context, accessToken, mediaURL,
 
 	var mr mastodonMediaResponse
 	if err := json.Unmarshal(body, &mr); err != nil {
-		return "", fmt.Errorf("forgesocial: upload media parse: %w", err)
+		return "", fmt.Errorf("social: upload media parse: %w", err)
 	}
 	return mr.ID, nil
 }
@@ -248,7 +248,7 @@ func (c *mastodonClient) postStatus(ctx context.Context, accessToken, body, medi
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: post status: %w", err)
+		return "", fmt.Errorf("social: post status: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -269,7 +269,7 @@ func (c *mastodonClient) postStatus(ctx context.Context, accessToken, body, medi
 
 	var sr mastodonStatusResponse
 	if err := json.Unmarshal(respBody, &sr); err != nil {
-		return "", fmt.Errorf("forgesocial: post status parse: %w", err)
+		return "", fmt.Errorf("social: post status parse: %w", err)
 	}
 	return sr.ID, nil
 }
@@ -311,7 +311,7 @@ type rateLimitError struct {
 }
 
 func (e *rateLimitError) Error() string {
-	return fmt.Sprintf("forgesocial: rate limited; retry after %s", e.retryAfter)
+	return fmt.Sprintf("social: rate limited; retry after %s", e.retryAfter)
 }
 
 // isTerminalStatus returns true for HTTP status codes that indicate a

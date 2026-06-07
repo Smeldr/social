@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -93,7 +93,7 @@ func (sc *scheduler) nextInterval() time.Duration {
 func (sc *scheduler) processDue(ctx context.Context) {
 	posts, err := duePosts(sc.social.db)
 	if err != nil {
-		log.Printf("forgesocial: scheduler: query due posts: %v", err)
+		log.Printf("social: scheduler: query due posts: %v", err)
 		return
 	}
 	for _, p := range posts {
@@ -117,7 +117,7 @@ func (sc *scheduler) processSlotQueue(ctx context.Context) {
 
 	schedules, err := listActiveSchedules(sc.social.db)
 	if err != nil {
-		log.Printf("forgesocial: scheduler: list active schedules: %v", err)
+		log.Printf("social: scheduler: list active schedules: %v", err)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (sc *scheduler) processSlotQueue(ctx context.Context) {
 
 		// Always advance last_tick_at, even if no slot fires.
 		if err := updateScheduleLastTick(sc.social.db, sched.ID, now); err != nil {
-			log.Printf("forgesocial: scheduler: update last_tick_at for schedule %s: %v", sched.ID, err)
+			log.Printf("social: scheduler: update last_tick_at for schedule %s: %v", sched.ID, err)
 		}
 
 		if len(sched.Slots) == 0 {
@@ -157,7 +157,7 @@ func (sc *scheduler) processSlotQueue(ctx context.Context) {
 					break // queue empty for this credential
 				}
 				if err != nil {
-					log.Printf("forgesocial: scheduler: dequeue for credential %s: %v", sched.CredentialID, err)
+					log.Printf("social: scheduler: dequeue for credential %s: %v", sched.CredentialID, err)
 					break
 				}
 				sc.publishWithRetry(ctx, p)
@@ -175,14 +175,14 @@ func (sc *scheduler) publishWithRetry(ctx context.Context, p ScheduledPost) {
 
 	attempts, err := deliveryAttemptCount(s.db, p.ID)
 	if err != nil {
-		log.Printf("forgesocial: scheduler: count attempts for %s: %v", p.ID, err)
+		log.Printf("social: scheduler: count attempts for %s: %v", p.ID, err)
 		return
 	}
 
 	// Fetch decrypted credential.
 	cred, err := s.creds.getCredential(p.CredentialID)
 	if err != nil {
-		log.Printf("forgesocial: scheduler: get credential for post %s: %v", p.ID, err)
+		log.Printf("social: scheduler: get credential for post %s: %v", p.ID, err)
 		_ = markPostFailed(s.db, p.ID, "credential not found: "+err.Error())
 		return
 	}
@@ -195,7 +195,7 @@ func (sc *scheduler) publishWithRetry(ctx context.Context, p ScheduledPost) {
 		// Success.
 		_ = logDeliveryAttempt(s.db, p.ID, attempts+1, 200, "")
 		if err := markPostPublished(s.db, p.ID, platformID); err != nil {
-			log.Printf("forgesocial: scheduler: mark published %s: %v", p.ID, err)
+			log.Printf("social: scheduler: mark published %s: %v", p.ID, err)
 		}
 		return
 	}
@@ -214,7 +214,7 @@ func (sc *scheduler) publishWithRetry(ctx context.Context, p ScheduledPost) {
 
 	// Terminal error — stop retrying.
 	if (errors.As(publishErr, &pe) && pe.IsTerminal()) || attempts+1 >= len(retryDelays)+1 {
-		log.Printf("forgesocial: scheduler: terminal failure for post %s: %v", p.ID, publishErr)
+		log.Printf("social: scheduler: terminal failure for post %s: %v", p.ID, publishErr)
 		_ = markPostFailed(s.db, p.ID, publishErr.Error())
 		return
 	}
@@ -234,7 +234,7 @@ func (sc *scheduler) publishWithRetry(ctx context.Context, p ScheduledPost) {
 	retryAt := time.Now().UTC().Add(delay)
 	p.ScheduledAt = &retryAt
 	if err := updatePost(s.db, p); err != nil {
-		log.Printf("forgesocial: scheduler: update retry time for %s: %v", p.ID, err)
+		log.Printf("social: scheduler: update retry time for %s: %v", p.ID, err)
 	}
 }
 
@@ -280,7 +280,7 @@ func (s *Social) maybeRefreshXCredential(ctx context.Context, cred *PlatformCred
 
 	tr, err := tc.refreshXToken(ctx, cred.refreshToken)
 	if err != nil {
-		log.Printf("forgesocial: X token refresh failed for credential %s: %v — publishing with existing token", cred.ID, err)
+		log.Printf("social: X token refresh failed for credential %s: %v — publishing with existing token", cred.ID, err)
 		return
 	}
 
@@ -299,7 +299,7 @@ func (s *Social) maybeRefreshXCredential(ctx context.Context, cred *PlatformCred
 		"x", xAPIBase, cred.Name,
 		tr.AccessToken, newRefresh, cred.ActorID, expiresAt,
 	); err != nil {
-		log.Printf("forgesocial: X token persist failed for credential %s: %v — publishing with existing token", cred.ID, err)
+		log.Printf("social: X token persist failed for credential %s: %v — publishing with existing token", cred.ID, err)
 		return
 	}
 

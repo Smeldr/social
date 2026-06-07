@@ -1,20 +1,20 @@
-// Package forgesocial provides platform publishing for Forge applications.
+// Package social provides platform publishing for Smeldr applications.
 // It supports scheduling and publishing content to Mastodon and LinkedIn
 // via OAuth 2.0.
 //
 // # Quick start
 //
-//	import forgesocial "smeldr.dev/social"
+//	import "smeldr.dev/social"
 //
-//	social := forgesocial.New(db, forgesocial.Config{
+//	social := social.New(db, social.Config{
 //	    Secret: cfg.Secret,
-//	    Mastodon: forgesocial.MastodonConfig{
+//	    Mastodon: social.MastodonConfig{
 //	        ClientID:     os.Getenv("MASTODON_CLIENT_ID"),
 //	        ClientSecret: os.Getenv("MASTODON_CLIENT_SECRET"),
 //	        InstanceURL:  os.Getenv("MASTODON_INSTANCE_URL"),
 //	        RedirectURL:  cfg.BaseURL + "/oauth/mastodon/callback",
 //	    },
-//	    LinkedIn: forgesocial.LinkedInConfig{
+//	    LinkedIn: social.LinkedInConfig{
 //	        ClientID:     os.Getenv("LINKEDIN_CLIENT_ID"),
 //	        ClientSecret: os.Getenv("LINKEDIN_CLIENT_SECRET"),
 //	        RedirectURL:  cfg.BaseURL + "/oauth/linkedin/callback",
@@ -24,16 +24,16 @@
 //	defer social.Stop()
 //
 //	// Wire MCP tools.
-//	mcpSrv := forgemcp.New(app,
-//	    forgemcp.WithModule(social.PostModule()),
-//	    forgemcp.WithModule(social.CredentialModule()),
+//	mcpSrv := mcp.New(app,
+//	    mcp.WithModule(social.PostModule()),
+//	    mcp.WithModule(social.CredentialModule()),
 //	)
 //	// Layer 1 — wire agent routing (optional).
 //	// Fires on AfterPublish for "Post" content type.
 //	social.AddRoutes(app,
-//	    forgesocial.OnPublish("Post", "https://agent.example.com/social"),
+//	    social.OnPublish("Post", "https://agent.example.com/social"),
 //	)
-package forgesocial
+package social
 
 import (
 	"fmt"
@@ -77,13 +77,13 @@ type Social struct {
 // if Config.Secret is empty, or if the database tables cannot be created.
 func New(db smeldr.DB, cfg Config) *Social {
 	if db == nil {
-		panic("forgesocial.New: db is nil")
+		panic("social.New: db is nil")
 	}
 	if len(cfg.Secret) == 0 {
-		panic("forgesocial.New: Config.Secret is required")
+		panic("social.New: Config.Secret is required")
 	}
 	if err := CreateTables(db); err != nil {
-		panic(fmt.Sprintf("forgesocial.New: create tables: %v", err))
+		panic(fmt.Sprintf("social.New: create tables: %v", err))
 	}
 	cs := newCredentialStore(db, cfg.Secret)
 	pcs := newPlatformConfigStore(db, cfg.Secret)
@@ -94,7 +94,7 @@ func New(db smeldr.DB, cfg Config) *Social {
 		platformCfgs: pcs,
 	}
 
-	// Load platform config from DB; fall back to forgesocial.Config env vars.
+	// Load platform config from DB; fall back to social.Config env vars.
 	if dbCfg, ok, err := pcs.load("mastodon"); err == nil && ok {
 		s.mastodon = newMastodonClient(MastodonConfig{
 			ClientID:     dbCfg.ClientID,
@@ -105,7 +105,7 @@ func New(db smeldr.DB, cfg Config) *Social {
 			Scopes:       dbCfg.Scopes,
 		})
 	} else if err == nil && cfg.Mastodon.ClientID != "" {
-		log.Println("forgesocial: DEPRECATED: MastodonConfig in forgesocial.Config; use configure_platform MCP tool instead")
+		log.Println("social: DEPRECATED: MastodonConfig in social.Config; use configure_platform MCP tool instead")
 		s.mastodon = newMastodonClient(cfg.Mastodon)
 	}
 
@@ -117,7 +117,7 @@ func New(db smeldr.DB, cfg Config) *Social {
 			SuccessURL:   dbCfg.SuccessURL,
 		})
 	} else if err == nil && cfg.LinkedIn.ClientID != "" {
-		log.Println("forgesocial: DEPRECATED: LinkedInConfig in forgesocial.Config; use configure_platform MCP tool instead")
+		log.Println("social: DEPRECATED: LinkedInConfig in social.Config; use configure_platform MCP tool instead")
 		s.linkedin = newLinkedinClient(cfg.LinkedIn)
 	}
 
@@ -134,7 +134,7 @@ func New(db smeldr.DB, cfg Config) *Social {
 	return s
 }
 
-// Register mounts the forge-social HTTP routes on app and starts the
+// Register mounts the social HTTP routes on app and starts the
 // internal scheduler goroutine.
 //
 // Routes registered:
@@ -165,28 +165,28 @@ func (s *Social) Stop() {
 
 // PostModule returns a [smeldr.MCPModule] that exposes [ScheduledPost] as MCP
 // tools (create, update, publish, archive, delete, list, get).
-// Pass it to forgemcp.WithModule when wiring the MCP server.
+// Pass it to mcp.WithModule when wiring the MCP server.
 func (s *Social) PostModule() smeldr.MCPModule {
 	return &postModule{social: s}
 }
 
 // CredentialModule returns a [smeldr.MCPModule] that exposes [PlatformCredential]
 // as MCP tools (create/connect, list, get, delete).
-// Pass it to forgemcp.WithModule when wiring the MCP server.
+// Pass it to mcp.WithModule when wiring the MCP server.
 func (s *Social) CredentialModule() smeldr.MCPModule {
 	return &credentialModule{social: s}
 }
 
 // ScheduleModule returns a [smeldr.MCPModule] that exposes [PublicationSchedule]
 // as MCP tools (create, update, get, list, delete).
-// Pass it to forgemcp.WithModule when wiring the MCP server.
+// Pass it to mcp.WithModule when wiring the MCP server.
 func (s *Social) ScheduleModule() smeldr.MCPModule {
 	return &scheduleModule{social: s}
 }
 
 // ConfigModule returns a [smeldr.MCPModule] that exposes the configure_platform
 // admin tool for storing per-platform OAuth 2.0 app credentials in the DB.
-// Pass it to forgemcp.WithModule when wiring the MCP server.
+// Pass it to mcp.WithModule when wiring the MCP server.
 // Only users with Admin role can call the configure_platform tool.
 func (s *Social) ConfigModule() smeldr.MCPModule {
 	return &configModule{social: s}

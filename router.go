@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -44,7 +44,7 @@ type routeJobStore struct {
 func (s *routeJobStore) enqueue(route Route, sig smeldr.Signal, ev smeldr.SignalEvent) {
 	payload, err := json.Marshal(ev)
 	if err != nil {
-		log.Printf("forgesocial: router: marshal signal event: %v", err)
+		log.Printf("social: router: marshal signal event: %v", err)
 		return
 	}
 	now := time.Now().UTC()
@@ -61,7 +61,7 @@ func (s *routeJobStore) enqueue(route Route, sig smeldr.Signal, ev smeldr.Signal
 		now,
 	)
 	if err != nil {
-		log.Printf("forgesocial: router: enqueue job for %s/%s → %s: %v",
+		log.Printf("social: router: enqueue job for %s/%s → %s: %v",
 			route.Signal, route.ContentType, route.AgentURL, err)
 	}
 }
@@ -77,7 +77,7 @@ func (s *routeJobStore) dueJobs(ctx context.Context) ([]routeJob, error) {
 		time.Now().UTC(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("forgesocial: route jobs query: %w", err)
+		return nil, fmt.Errorf("social: route jobs query: %w", err)
 	}
 	defer rows.Close()
 
@@ -86,7 +86,7 @@ func (s *routeJobStore) dueJobs(ctx context.Context) ([]routeJob, error) {
 		var j routeJob
 		if err := rows.Scan(&j.ID, &j.Signal, &j.ContentType, &j.AgentURL,
 			&j.Payload, &j.Status, &j.Attempts, &j.NextAttempt, &j.LastError, &j.CreatedAt); err != nil {
-			return nil, fmt.Errorf("forgesocial: route jobs scan: %w", err)
+			return nil, fmt.Errorf("social: route jobs scan: %w", err)
 		}
 		jobs = append(jobs, j)
 	}
@@ -123,7 +123,7 @@ func (s *routeJobStore) logAttempt(ctx context.Context, jobID string, attempt, s
 		smeldr.NewID(), jobID, attempt, statusCode, errMsg, time.Now().UTC(),
 	)
 	if err != nil {
-		log.Printf("forgesocial: router: log attempt for job %s: %v", jobID, err)
+		log.Printf("social: router: log attempt for job %s: %v", jobID, err)
 	}
 }
 

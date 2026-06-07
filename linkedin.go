@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"bytes"
@@ -70,24 +70,24 @@ func (lc *linkedinClient) exchangeCode(ctx context.Context, code string) (*linke
 		"https://www.linkedin.com/oauth/v2/accessToken",
 		strings.NewReader(body.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("forgesocial: linkedin token request: %w", err)
+		return nil, fmt.Errorf("social: linkedin token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := lc.hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("forgesocial: linkedin token exchange: %w", err)
+		return nil, fmt.Errorf("social: linkedin token exchange: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("forgesocial: linkedin token exchange: HTTP %d: %s", resp.StatusCode, b)
+		return nil, fmt.Errorf("social: linkedin token exchange: HTTP %d: %s", resp.StatusCode, b)
 	}
 
 	var tr linkedinTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return nil, fmt.Errorf("forgesocial: linkedin token decode: %w", err)
+		return nil, fmt.Errorf("social: linkedin token decode: %w", err)
 	}
 	return &tr, nil
 }
@@ -98,29 +98,29 @@ func (lc *linkedinClient) fetchPersonURN(ctx context.Context, accessToken string
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://api.linkedin.com/v2/userinfo", nil)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: linkedin userinfo request: %w", err)
+		return "", fmt.Errorf("social: linkedin userinfo request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := lc.hc.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: linkedin userinfo: %w", err)
+		return "", fmt.Errorf("social: linkedin userinfo: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("forgesocial: linkedin userinfo: HTTP %d: %s", resp.StatusCode, b)
+		return "", fmt.Errorf("social: linkedin userinfo: HTTP %d: %s", resp.StatusCode, b)
 	}
 
 	var info struct {
 		Sub string `json:"sub"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return "", fmt.Errorf("forgesocial: linkedin userinfo decode: %w", err)
+		return "", fmt.Errorf("social: linkedin userinfo decode: %w", err)
 	}
 	if info.Sub == "" {
-		return "", fmt.Errorf("forgesocial: linkedin userinfo: sub field is empty")
+		return "", fmt.Errorf("social: linkedin userinfo: sub field is empty")
 	}
 	return "urn:li:person:" + info.Sub, nil
 }
@@ -161,13 +161,13 @@ func (lc *linkedinClient) publish(ctx context.Context, p ScheduledPost, cred Pla
 
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: linkedin marshal post: %w", err)
+		return "", fmt.Errorf("social: linkedin marshal post: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		"https://api.linkedin.com/v2/ugcPosts", bytes.NewReader(raw))
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: linkedin post request: %w", err)
+		return "", fmt.Errorf("social: linkedin post request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cred.accessToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -175,7 +175,7 @@ func (lc *linkedinClient) publish(ctx context.Context, p ScheduledPost, cred Pla
 
 	resp, err := lc.hc.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: linkedin post: %w", err)
+		return "", fmt.Errorf("social: linkedin post: %w", err)
 	}
 	defer resp.Body.Close()
 

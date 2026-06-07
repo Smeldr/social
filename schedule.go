@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -46,7 +46,7 @@ type PublicationSchedule struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
-// GetSlug satisfies the slugger interface used by forge-mcp's allResources.
+// GetSlug satisfies the slugger interface used by mcp's allResources.
 func (ps PublicationSchedule) GetSlug() string { return ps.ID }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ func (ps PublicationSchedule) GetSlug() string { return ps.ID }
 func insertSchedule(db smeldr.DB, s PublicationSchedule) error {
 	slotsJSON, err := json.Marshal(s.Slots)
 	if err != nil {
-		return fmt.Errorf("forgesocial: marshal slots: %w", err)
+		return fmt.Errorf("social: marshal slots: %w", err)
 	}
 	_, err = db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_publication_schedules
@@ -69,7 +69,7 @@ func insertSchedule(db smeldr.DB, s PublicationSchedule) error {
 func updateSchedule(db smeldr.DB, s PublicationSchedule) error {
 	slotsJSON, err := json.Marshal(s.Slots)
 	if err != nil {
-		return fmt.Errorf("forgesocial: marshal slots: %w", err)
+		return fmt.Errorf("social: marshal slots: %w", err)
 	}
 	_, err = db.ExecContext(context.Background(), `
 		UPDATE forge_social_publication_schedules
@@ -238,7 +238,7 @@ func scanSchedule(row *sql.Row) (PublicationSchedule, error) {
 		return s, err
 	}
 	if err := json.Unmarshal([]byte(slotsJSON), &s.Slots); err != nil {
-		return s, fmt.Errorf("forgesocial: unmarshal slots: %w", err)
+		return s, fmt.Errorf("social: unmarshal slots: %w", err)
 	}
 	if s.Slots == nil {
 		s.Slots = []Slot{}
@@ -258,7 +258,7 @@ func scanScheduleRow(rows *sql.Rows) (PublicationSchedule, error) {
 		return s, err
 	}
 	if err := json.Unmarshal([]byte(slotsJSON), &s.Slots); err != nil {
-		return s, fmt.Errorf("forgesocial: unmarshal slots: %w", err)
+		return s, fmt.Errorf("social: unmarshal slots: %w", err)
 	}
 	if s.Slots == nil {
 		s.Slots = []Slot{}

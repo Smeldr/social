@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -47,7 +47,7 @@ type ScheduledPost struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
-// GetSlug satisfies the slugger interface used by forge-mcp's allResources.
+// GetSlug satisfies the slugger interface used by mcp's allResources.
 func (p ScheduledPost) GetSlug() string { return p.ID }
 
 // insertPost inserts a new ScheduledPost row.

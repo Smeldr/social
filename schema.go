@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 // CreateTables creates all forge_social_* database tables and indexes.
 // It is safe to call multiple times — all statements use CREATE ... IF NOT EXISTS.
-// Call this once at application startup before any other forge-social operations.
+// Call this once at application startup before any other social operations.
 //
 // It also applies an idempotent migration that adds the actor_id column to
 // forge_social_credentials for databases created before v0.2.0.
@@ -100,7 +100,7 @@ func CreateTables(db smeldr.DB) error {
 	ctx := context.Background()
 	for _, stmt := range stmts {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("forgesocial: create tables: %w", err)
+			return fmt.Errorf("social: create tables: %w", err)
 		}
 	}
 
@@ -111,7 +111,7 @@ func CreateTables(db smeldr.DB) error {
 	_, err := db.ExecContext(ctx,
 		`ALTER TABLE forge_social_credentials ADD COLUMN actor_id TEXT NOT NULL DEFAULT ''`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		return fmt.Errorf("forgesocial: migrate actor_id: %w", err)
+		return fmt.Errorf("social: migrate actor_id: %w", err)
 	}
 
 	// Idempotent migration: add code_verifier column for databases created before v0.5.0.
@@ -119,7 +119,7 @@ func CreateTables(db smeldr.DB) error {
 	_, err = db.ExecContext(ctx,
 		`ALTER TABLE forge_social_oauth_states ADD COLUMN code_verifier TEXT NOT NULL DEFAULT ''`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		return fmt.Errorf("forgesocial: migrate code_verifier: %w", err)
+		return fmt.Errorf("social: migrate code_verifier: %w", err)
 	}
 
 	return nil

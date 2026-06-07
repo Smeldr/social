@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"fmt"
@@ -61,19 +61,19 @@ func OnDelete(contentType, agentURL string) Route {
 // empty secret.
 func validateRoute(r Route) {
 	if r.ContentType == "" {
-		panic("forgesocial.AddRoutes: Route.ContentType must not be empty")
+		panic("social.AddRoutes: Route.ContentType must not be empty")
 	}
 	// Warn if ContentType does not start with an uppercase letter — the
 	// developer likely passed a lowercase string instead of the struct name.
 	first := rune(r.ContentType[0])
 	if !unicode.IsUpper(first) {
 		panic(fmt.Sprintf(
-			"forgesocial.AddRoutes: Route.ContentType %q should be PascalCase (the Go struct name, e.g. %q)",
+			"social.AddRoutes: Route.ContentType %q should be PascalCase (the Go struct name, e.g. %q)",
 			r.ContentType, strings.ToUpper(r.ContentType[:1])+r.ContentType[1:],
 		))
 	}
 	if err := validateAgentURL(r.AgentURL); err != nil {
-		panic(fmt.Sprintf("forgesocial.AddRoutes: %v", err))
+		panic(fmt.Sprintf("social.AddRoutes: %v", err))
 	}
 }
 

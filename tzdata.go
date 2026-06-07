@@ -1,3 +1,3 @@
-package forgesocial
+package social
 
 import _ "time/tzdata"

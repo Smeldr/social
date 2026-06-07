@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 // Export internal functions for white-box testing.
 // This file is compiled into the package (not the test binary) so that
-// external test packages (package forgesocial_test) can call them.
+// external test packages (package social_test) can call them.
 
 // ValidateAgentURLForTest calls validateAgentURL and panics on error.
 // Used in tests to exercise SSRF rejection without going through AddRoutes.

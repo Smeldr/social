@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func consumeOAuthState(db smeldr.DB, state string) (platform, codeVerifier strin
 	).Scan(&platform, &codeVerifier, &createdAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", fmt.Errorf("forgesocial: unknown OAuth state")
+		return "", "", fmt.Errorf("social: unknown OAuth state")
 	}
 	if err != nil {
 		return "", "", err
@@ -49,7 +49,7 @@ func consumeOAuthState(db smeldr.DB, state string) (platform, codeVerifier strin
 		`DELETE FROM forge_social_oauth_states WHERE state=?`, state)
 
 	if time.Since(createdAt) > oauthStateTTL {
-		return "", "", fmt.Errorf("forgesocial: OAuth state expired")
+		return "", "", fmt.Errorf("social: OAuth state expired")
 	}
 
 	return platform, codeVerifier, nil

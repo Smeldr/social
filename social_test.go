@@ -1,4 +1,4 @@
-package forgesocial_test
+package social_test
 
 import (
 	"database/sql"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"smeldr.dev/core"
-	forgesocial "smeldr.dev/social"
+	"smeldr.dev/social"
 
 	_ "modernc.org/sqlite"
 )
@@ -20,7 +20,7 @@ func openTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open test db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := forgesocial.CreateTables(db); err != nil {
+	if err := social.CreateTables(db); err != nil {
 		t.Fatalf("create tables: %v", err)
 	}
 	return db
@@ -41,7 +41,7 @@ func TestNew_PanicsOnNilDB(t *testing.T) {
 			t.Error("expected panic for nil db")
 		}
 	}()
-	forgesocial.New(nil, forgesocial.Config{Secret: []byte("secret")})
+	social.New(nil, social.Config{Secret: []byte("secret")})
 }
 
 func TestNew_PanicsOnEmptySecret(t *testing.T) {
@@ -51,15 +51,15 @@ func TestNew_PanicsOnEmptySecret(t *testing.T) {
 			t.Error("expected panic for empty secret")
 		}
 	}()
-	forgesocial.New(db, forgesocial.Config{})
+	social.New(db, social.Config{})
 }
 
 func TestNew_CreatesTables(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	if social == nil {
+	if svc == nil {
 		t.Fatal("New returned nil")
 	}
 }
@@ -67,7 +67,7 @@ func TestNew_CreatesTables(t *testing.T) {
 func TestCreateTables_Idempotent(t *testing.T) {
 	db := openTestDB(t)
 	// Call twice — should not error.
-	if err := forgesocial.CreateTables(db); err != nil {
+	if err := social.CreateTables(db); err != nil {
 		t.Fatalf("second CreateTables: %v", err)
 	}
 }
@@ -75,12 +75,12 @@ func TestCreateTables_Idempotent(t *testing.T) {
 func TestScheduledPost_Lifecycle(t *testing.T) {
 	db := openTestDB(t)
 
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
+	defer svc.Stop()
 
-	pm := social.PostModule()
+	pm := svc.PostModule()
 	ctx := adminCtx()
 
 	// Need a credential ID — placeholder; no real Mastodon present.
@@ -94,12 +94,12 @@ func TestScheduledPost_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MCPCreate: %v", err)
 	}
-	post, ok := result.(forgesocial.ScheduledPost)
+	post, ok := result.(social.ScheduledPost)
 	if !ok {
 		t.Fatalf("MCPCreate result type: %T", result)
 	}
-	if post.Status != forgesocial.PostStatusDraft {
-		t.Errorf("status = %q; want %q", post.Status, forgesocial.PostStatusDraft)
+	if post.Status != social.PostStatusDraft {
+		t.Errorf("status = %q; want %q", post.Status, social.PostStatusDraft)
 	}
 	if post.Body != "Hello, Mastodon!" {
 		t.Errorf("body = %q", post.Body)
@@ -119,7 +119,7 @@ func TestScheduledPost_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MCPGet: %v", err)
 	}
-	if got.(forgesocial.ScheduledPost).ID != post.ID {
+	if got.(social.ScheduledPost).ID != post.ID {
 		t.Errorf("MCPGet ID mismatch")
 	}
 
@@ -129,8 +129,8 @@ func TestScheduledPost_Lifecycle(t *testing.T) {
 		t.Fatalf("MCPSchedule: %v", err)
 	}
 	updated, _ := pm.MCPGet(ctx, post.ID)
-	if updated.(forgesocial.ScheduledPost).Status != forgesocial.PostStatusScheduled {
-		t.Errorf("after MCPSchedule status = %q", updated.(forgesocial.ScheduledPost).Status)
+	if updated.(social.ScheduledPost).Status != social.PostStatusScheduled {
+		t.Errorf("after MCPSchedule status = %q", updated.(social.ScheduledPost).Status)
 	}
 
 	// MCPArchive.
@@ -138,8 +138,8 @@ func TestScheduledPost_Lifecycle(t *testing.T) {
 		t.Fatalf("MCPArchive: %v", err)
 	}
 	archived, _ := pm.MCPGet(ctx, post.ID)
-	if archived.(forgesocial.ScheduledPost).Status != forgesocial.PostStatusArchived {
-		t.Errorf("after MCPArchive status = %q", archived.(forgesocial.ScheduledPost).Status)
+	if archived.(social.ScheduledPost).Status != social.PostStatusArchived {
+		t.Errorf("after MCPArchive status = %q", archived.(social.ScheduledPost).Status)
 	}
 
 	// MCPDelete.
@@ -154,11 +154,11 @@ func TestScheduledPost_Lifecycle(t *testing.T) {
 
 func TestPost_MediaRequiresAltText(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
-	pm := social.PostModule()
+	defer svc.Stop()
+	pm := svc.PostModule()
 	ctx := adminCtx()
 
 	_, err := pm.MCPCreate(ctx, map[string]any{
@@ -174,11 +174,11 @@ func TestPost_MediaRequiresAltText(t *testing.T) {
 
 func TestPost_ScheduledAtAutoSetsStatus(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
-	pm := social.PostModule()
+	defer svc.Stop()
+	pm := svc.PostModule()
 	ctx := adminCtx()
 
 	future := time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339)
@@ -190,26 +190,26 @@ func TestPost_ScheduledAtAutoSetsStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MCPCreate: %v", err)
 	}
-	p := result.(forgesocial.ScheduledPost)
-	if p.Status != forgesocial.PostStatusScheduled {
-		t.Errorf("status = %q; want %q", p.Status, forgesocial.PostStatusScheduled)
+	p := result.(social.ScheduledPost)
+	if p.Status != social.PostStatusScheduled {
+		t.Errorf("status = %q; want %q", p.Status, social.PostStatusScheduled)
 	}
 }
 
 func TestCredentialModule_ConnectMastodonReturnsRedirectURL(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
-		Mastodon: forgesocial.MastodonConfig{
+		Mastodon: social.MastodonConfig{
 			ClientID:     "test-client-id",
 			ClientSecret: "test-client-secret",
 			InstanceURL:  "https://mastodon.social",
 			RedirectURL:  "https://myapp.com/oauth/mastodon/callback",
 		},
 	})
-	defer social.Stop()
+	defer svc.Stop()
 
-	cm := social.CredentialModule()
+	cm := svc.CredentialModule()
 	ctx := adminCtx()
 
 	result, err := cm.MCPCreate(ctx, map[string]any{
@@ -234,14 +234,14 @@ func TestCredentialModule_ConnectMastodonReturnsRedirectURL(t *testing.T) {
 
 func TestSchedulerStop_DoesNotHang(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		social.Stop()
+		svc.Stop()
 	}()
 
 	select {
@@ -254,17 +254,17 @@ func TestSchedulerStop_DoesNotHang(t *testing.T) {
 
 func TestLinkedIn_ConnectReturnsRedirectURL(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
-		LinkedIn: forgesocial.LinkedInConfig{
+		LinkedIn: social.LinkedInConfig{
 			ClientID:     "li-client-id",
 			ClientSecret: "li-client-secret",
 			RedirectURL:  "https://myapp.com/oauth/linkedin/callback",
 		},
 	})
-	defer social.Stop()
+	defer svc.Stop()
 
-	cm := social.CredentialModule()
+	cm := svc.CredentialModule()
 	ctx := adminCtx()
 
 	result, err := cm.MCPCreate(ctx, map[string]any{
@@ -290,12 +290,12 @@ func TestLinkedIn_ConnectReturnsRedirectURL(t *testing.T) {
 func TestLinkedIn_NotConfigured_ReturnsError(t *testing.T) {
 	db := openTestDB(t)
 	// No LinkedIn config — ClientID is empty, so linkedin client is nil.
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
+	defer svc.Stop()
 
-	cm := social.CredentialModule()
+	cm := svc.CredentialModule()
 	ctx := adminCtx()
 
 	_, err := cm.MCPCreate(ctx, map[string]any{"platform": "linkedin"})
@@ -306,11 +306,11 @@ func TestLinkedIn_NotConfigured_ReturnsError(t *testing.T) {
 
 func TestPost_PlatformDefaultsMastodon(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
-	pm := social.PostModule()
+	defer svc.Stop()
+	pm := svc.PostModule()
 	ctx := adminCtx()
 
 	result, err := pm.MCPCreate(ctx, map[string]any{
@@ -321,7 +321,7 @@ func TestPost_PlatformDefaultsMastodon(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MCPCreate: %v", err)
 	}
-	p := result.(forgesocial.ScheduledPost)
+	p := result.(social.ScheduledPost)
 	if p.Platform != "mastodon" {
 		t.Errorf("platform = %q; want %q", p.Platform, "mastodon")
 	}
@@ -329,11 +329,11 @@ func TestPost_PlatformDefaultsMastodon(t *testing.T) {
 
 func TestPost_PlatformLinkedIn(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
-	pm := social.PostModule()
+	defer svc.Stop()
+	pm := svc.PostModule()
 	ctx := adminCtx()
 
 	result, err := pm.MCPCreate(ctx, map[string]any{
@@ -344,7 +344,7 @@ func TestPost_PlatformLinkedIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MCPCreate: %v", err)
 	}
-	p := result.(forgesocial.ScheduledPost)
+	p := result.(social.ScheduledPost)
 	if p.Platform != "linkedin" {
 		t.Errorf("platform = %q; want %q", p.Platform, "linkedin")
 	}
@@ -352,11 +352,11 @@ func TestPost_PlatformLinkedIn(t *testing.T) {
 
 func TestPost_PlatformInvalidReturnsError(t *testing.T) {
 	db := openTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
-	pm := social.PostModule()
+	defer svc.Stop()
+	pm := svc.PostModule()
 	ctx := adminCtx()
 
 	_, err := pm.MCPCreate(ctx, map[string]any{
@@ -395,7 +395,7 @@ func TestMigration_ActorIDColumn(t *testing.T) {
 	}
 
 	// Run CreateTables — should succeed and add actor_id.
-	if err := forgesocial.CreateTables(db); err != nil {
+	if err := social.CreateTables(db); err != nil {
 		t.Fatalf("CreateTables migration: %v", err)
 	}
 

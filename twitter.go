@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func newTwitterClient(cfg xConfig) *twitterClient {
 func generatePKCE() (verifier, challenge string, err error) {
 	raw := make([]byte, 32)
 	if _, err = io.ReadFull(rand.Reader, raw); err != nil {
-		return "", "", fmt.Errorf("forgesocial: generate PKCE: %w", err)
+		return "", "", fmt.Errorf("social: generate PKCE: %w", err)
 	}
 	verifier = base64.RawURLEncoding.EncodeToString(raw)
 	sum := sha256.Sum256([]byte(verifier))
@@ -119,15 +119,15 @@ func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaUR
 	// Fetch the image bytes.
 	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: X fetch media: %w", err)
+		return "", fmt.Errorf("social: X fetch media: %w", err)
 	}
 	imgResp, err := client.Do(imgReq)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: X fetch media: %w", err)
+		return "", fmt.Errorf("social: X fetch media: %w", err)
 	}
 	defer imgResp.Body.Close()
 	if imgResp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("forgesocial: X fetch media: HTTP %d", imgResp.StatusCode)
+		return "", fmt.Errorf("social: X fetch media: HTTP %d", imgResp.StatusCode)
 	}
 	contentType := imgResp.Header.Get("Content-Type")
 	if contentType == "" {
@@ -135,24 +135,24 @@ func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaUR
 	}
 	imgBytes, err := io.ReadAll(io.LimitReader(imgResp.Body, 10<<20)) // 10 MB cap
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: X fetch media read: %w", err)
+		return "", fmt.Errorf("social: X fetch media read: %w", err)
 	}
 
 	// Build multipart body.
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	if err := mw.WriteField("media_category", "tweet_image"); err != nil {
-		return "", fmt.Errorf("forgesocial: X media multipart: %w", err)
+		return "", fmt.Errorf("social: X media multipart: %w", err)
 	}
 	h := make(map[string][]string)
 	h["Content-Disposition"] = []string{`form-data; name="media"; filename="upload"`}
 	h["Content-Type"] = []string{contentType}
 	fw, err := mw.CreatePart(h)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: X media multipart: %w", err)
+		return "", fmt.Errorf("social: X media multipart: %w", err)
 	}
 	if _, err := io.Copy(fw, bytes.NewReader(imgBytes)); err != nil {
-		return "", fmt.Errorf("forgesocial: X media multipart write: %w", err)
+		return "", fmt.Errorf("social: X media multipart write: %w", err)
 	}
 	mw.Close()
 
@@ -165,7 +165,7 @@ func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaUR
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: X upload media: %w", err)
+		return "", fmt.Errorf("social: X upload media: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -180,7 +180,7 @@ func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaUR
 
 	var mr xMediaUploadResponse
 	if err := json.Unmarshal(body, &mr); err != nil {
-		return "", fmt.Errorf("forgesocial: X upload media parse: %w", err)
+		return "", fmt.Errorf("social: X upload media parse: %w", err)
 	}
 	return mr.Data.ID, nil
 }
@@ -209,22 +209,22 @@ func (c *twitterClient) exchangeCode(ctx context.Context, code, codeVerifier str
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token exchange: %w", err)
+		return xTokenResponse{}, fmt.Errorf("social: X token exchange: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token exchange read: %w", err)
+		return xTokenResponse{}, fmt.Errorf("social: X token exchange read: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token exchange: HTTP %d: %s",
+		return xTokenResponse{}, fmt.Errorf("social: X token exchange: HTTP %d: %s",
 			resp.StatusCode, truncate(string(body), 256))
 	}
 
 	var tr xTokenResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token exchange parse: %w", err)
+		return xTokenResponse{}, fmt.Errorf("social: X token exchange parse: %w", err)
 	}
 	return tr, nil
 }
@@ -249,22 +249,22 @@ func (c *twitterClient) refreshXToken(ctx context.Context, refreshTok string) (x
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh: %w", err)
+		return xTokenResponse{}, fmt.Errorf("social: X token refresh: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh read: %w", err)
+		return xTokenResponse{}, fmt.Errorf("social: X token refresh read: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh: HTTP %d: %s",
+		return xTokenResponse{}, fmt.Errorf("social: X token refresh: HTTP %d: %s",
 			resp.StatusCode, truncate(string(body), 256))
 	}
 
 	var tr xTokenResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
-		return xTokenResponse{}, fmt.Errorf("forgesocial: X token refresh parse: %w", err)
+		return xTokenResponse{}, fmt.Errorf("social: X token refresh parse: %w", err)
 	}
 	return tr, nil
 }
@@ -285,7 +285,7 @@ func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred Platf
 	if p.MediaURL != "" {
 		mediaID, err := uploadXMedia(ctx, c.httpClient, cred.accessToken, p.MediaURL)
 		if err != nil {
-			return "", fmt.Errorf("forgesocial: X media upload: %w", err)
+			return "", fmt.Errorf("social: X media upload: %w", err)
 		}
 		tweetPayload.Media = &xTweetMedia{MediaIDs: []string{mediaID}}
 	}
@@ -308,7 +308,7 @@ func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred Platf
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: X publish: %w", err)
+		return "", fmt.Errorf("social: X publish: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -320,7 +320,7 @@ func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred Platf
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: X publish read: %w", err)
+		return "", fmt.Errorf("social: X publish read: %w", err)
 	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return "", &publishError{
@@ -332,7 +332,7 @@ func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred Platf
 
 	var tr xTweetResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
-		return "", fmt.Errorf("forgesocial: X publish parse: %w", err)
+		return "", fmt.Errorf("social: X publish parse: %w", err)
 	}
 	return tr.Data.ID, nil
 }

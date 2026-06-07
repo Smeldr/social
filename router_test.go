@@ -1,4 +1,4 @@
-package forgesocial_test
+package social_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"smeldr.dev/core"
-	forgesocial "smeldr.dev/social"
+	"smeldr.dev/social"
 
 	_ "modernc.org/sqlite"
 )
@@ -20,7 +20,7 @@ func openRouterTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := forgesocial.CreateTables(db); err != nil {
+	if err := social.CreateTables(db); err != nil {
 		t.Fatalf("create tables: %v", err)
 	}
 	return db
@@ -28,10 +28,10 @@ func openRouterTestDB(t *testing.T) *sql.DB {
 
 func TestAddRoutes_EmptyRoutesIsNoop(t *testing.T) {
 	db := openRouterTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
-	defer social.Stop()
+	defer svc.Stop()
 
 	// newFakeApp satisfies *smeldr.App without a real server.
 	// AddRoutes with no routes should be a no-op.
@@ -39,7 +39,7 @@ func TestAddRoutes_EmptyRoutesIsNoop(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		social.Stop()
+		svc.Stop()
 	}()
 	select {
 	case <-done:
@@ -56,20 +56,20 @@ func TestAddRoutes_PanicsOnPrivateIP(t *testing.T) {
 		}
 	}()
 	// 10.0.0.1 is in the RFC 1918 private range.
-	forgesocial.ValidateAgentURLForTest("https://10.0.0.1/hook")
+	social.ValidateAgentURLForTest("https://10.0.0.1/hook")
 }
 
 func TestRouter_StopWithoutRegister(t *testing.T) {
 	// Social.Stop() must not hang when AddRoutes was never called.
 	db := openRouterTestDB(t)
-	social := forgesocial.New(db, forgesocial.Config{
+	svc := social.New(db, social.Config{
 		Secret: []byte("test-secret-32-bytes-long-padded!"),
 	})
 	// Don't call Register or AddRoutes.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		social.Stop()
+		svc.Stop()
 	}()
 	select {
 	case <-done:
@@ -81,9 +81,9 @@ func TestRouter_StopWithoutRegister(t *testing.T) {
 func TestRouteJobStore_EnqueueAndPoll(t *testing.T) {
 	db := openRouterTestDB(t)
 
-	store := forgesocial.NewRouteJobStoreForTest(db)
+	store := social.NewRouteJobStoreForTest(db)
 
-	route := forgesocial.OnPublish("Post", "https://agent.example.com/hook")
+	route := social.OnPublish("Post", "https://agent.example.com/hook")
 	ev := smeldr.SignalEvent{
 		Type:      "Post",
 		Slug:      "my-post",
@@ -115,9 +115,9 @@ func TestRouteJobStore_EnqueueAndPoll(t *testing.T) {
 
 func TestRouteJobStore_MarkDelivered(t *testing.T) {
 	db := openRouterTestDB(t)
-	store := forgesocial.NewRouteJobStoreForTest(db)
+	store := social.NewRouteJobStoreForTest(db)
 
-	route := forgesocial.OnPublish("Story", "https://agent.example.com/hook")
+	route := social.OnPublish("Story", "https://agent.example.com/hook")
 	ev := smeldr.SignalEvent{Type: "Story", Slug: "s1", Timestamp: time.Now().UTC()}
 	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 

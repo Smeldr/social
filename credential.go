@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -74,7 +74,7 @@ func (cs *credentialStore) encryptToken(plaintext string) (string, error) {
 func (cs *credentialStore) decryptToken(enc string) (string, error) {
 	data, err := base64.StdEncoding.DecodeString(enc)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: token base64 decode: %w", err)
+		return "", fmt.Errorf("social: token base64 decode: %w", err)
 	}
 	block, err := aes.NewCipher(cs.appKey[:])
 	if err != nil {
@@ -85,12 +85,12 @@ func (cs *credentialStore) decryptToken(enc string) (string, error) {
 		return "", err
 	}
 	if len(data) < gcm.NonceSize() {
-		return "", fmt.Errorf("forgesocial: token ciphertext too short")
+		return "", fmt.Errorf("social: token ciphertext too short")
 	}
 	nonce, ct := data[:gcm.NonceSize()], data[gcm.NonceSize():]
 	plain, err := gcm.Open(nil, nonce, ct, nil)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: token decrypt: %w", err)
+		return "", fmt.Errorf("social: token decrypt: %w", err)
 	}
 	return string(plain), nil
 }
@@ -102,11 +102,11 @@ func (cs *credentialStore) decryptToken(enc string) (string, error) {
 func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, name, accessToken, refreshToken, actorID string, expiresAt *time.Time) (string, error) {
 	encAccess, err := cs.encryptToken(accessToken)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: encrypt access token: %w", err)
+		return "", fmt.Errorf("social: encrypt access token: %w", err)
 	}
 	encRefresh, err := cs.encryptToken(refreshToken)
 	if err != nil {
-		return "", fmt.Errorf("forgesocial: encrypt refresh token: %w", err)
+		return "", fmt.Errorf("social: encrypt refresh token: %w", err)
 	}
 	now := time.Now().UTC()
 

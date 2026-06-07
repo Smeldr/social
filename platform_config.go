@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"context"
@@ -67,7 +67,7 @@ func (s *platformConfigStore) encrypt(plaintext []byte) (string, error) {
 func (s *platformConfigStore) decrypt(enc string) ([]byte, error) {
 	data, err := base64.StdEncoding.DecodeString(enc)
 	if err != nil {
-		return nil, fmt.Errorf("forgesocial: platform config base64 decode: %w", err)
+		return nil, fmt.Errorf("social: platform config base64 decode: %w", err)
 	}
 	block, err := aes.NewCipher(s.appKey[:])
 	if err != nil {
@@ -78,12 +78,12 @@ func (s *platformConfigStore) decrypt(enc string) ([]byte, error) {
 		return nil, err
 	}
 	if len(data) < gcm.NonceSize() {
-		return nil, fmt.Errorf("forgesocial: platform config ciphertext too short")
+		return nil, fmt.Errorf("social: platform config ciphertext too short")
 	}
 	nonce, ct := data[:gcm.NonceSize()], data[gcm.NonceSize():]
 	plain, err := gcm.Open(nil, nonce, ct, nil)
 	if err != nil {
-		return nil, fmt.Errorf("forgesocial: platform config decrypt: %w", err)
+		return nil, fmt.Errorf("social: platform config decrypt: %w", err)
 	}
 	return plain, nil
 }
@@ -92,11 +92,11 @@ func (s *platformConfigStore) decrypt(enc string) ([]byte, error) {
 func (s *platformConfigStore) save(platform string, cfg PlatformConfig) error {
 	b, err := json.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("forgesocial: marshal platform config: %w", err)
+		return fmt.Errorf("social: marshal platform config: %w", err)
 	}
 	enc, err := s.encrypt(b)
 	if err != nil {
-		return fmt.Errorf("forgesocial: encrypt platform config: %w", err)
+		return fmt.Errorf("social: encrypt platform config: %w", err)
 	}
 	_, err = s.db.ExecContext(context.Background(), `
 		INSERT INTO forge_social_platform_config (platform, config, updated_at)
@@ -126,7 +126,7 @@ func (s *platformConfigStore) load(platform string) (PlatformConfig, bool, error
 	}
 	var cfg PlatformConfig
 	if err := json.Unmarshal(plain, &cfg); err != nil {
-		return PlatformConfig{}, false, fmt.Errorf("forgesocial: unmarshal platform config: %w", err)
+		return PlatformConfig{}, false, fmt.Errorf("social: unmarshal platform config: %w", err)
 	}
 	return cfg, true, nil
 }

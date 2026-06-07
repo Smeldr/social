@@ -1,4 +1,4 @@
-package forgesocial_test
+package social_test
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"smeldr.dev/core"
-	forgesocial "smeldr.dev/social"
+	"smeldr.dev/social"
 )
 
 func TestRouteWorker_Delivers2xx(t *testing.T) {
@@ -23,9 +23,9 @@ func TestRouteWorker_Delivers2xx(t *testing.T) {
 	defer srv.Close()
 
 	db := openRouterTestDB(t)
-	store := forgesocial.NewRouteJobStoreForTest(db)
+	store := social.NewRouteJobStoreForTest(db)
 
-	route := forgesocial.Route{
+	route := social.Route{
 		Signal:      smeldr.AfterPublish,
 		ContentType: "Post",
 		AgentURL:    srv.URL,
@@ -38,7 +38,7 @@ func TestRouteWorker_Delivers2xx(t *testing.T) {
 	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	// Run delivery directly via the exported helper.
-	forgesocial.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
+	social.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
 
 	select {
 	case body := <-received:
@@ -68,9 +68,9 @@ func TestRouteWorker_Marks4xxTerminal(t *testing.T) {
 	defer srv.Close()
 
 	db := openRouterTestDB(t)
-	store := forgesocial.NewRouteJobStoreForTest(db)
+	store := social.NewRouteJobStoreForTest(db)
 
-	route := forgesocial.Route{
+	route := social.Route{
 		Signal:      smeldr.AfterPublish,
 		ContentType: "Post",
 		AgentURL:    srv.URL,
@@ -78,14 +78,14 @@ func TestRouteWorker_Marks4xxTerminal(t *testing.T) {
 	ev := smeldr.SignalEvent{Type: "Post", Slug: "bad-post", Timestamp: time.Now().UTC()}
 	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
-	forgesocial.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
+	social.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
 
 	// Job should be failed (no retry).
 	jobs, _ := store.DueJobsForTest(t.Context())
 	if len(jobs) != 0 {
 		t.Errorf("expected 0 due jobs after 4xx, got %d", len(jobs))
 	}
-	failedJobs := forgesocial.GetFailedJobsForTest(db)
+	failedJobs := social.GetFailedJobsForTest(db)
 	if len(failedJobs) != 1 {
 		t.Errorf("expected 1 failed job, got %d", len(failedJobs))
 	}
@@ -98,9 +98,9 @@ func TestRouteWorker_Retries5xx(t *testing.T) {
 	defer srv.Close()
 
 	db := openRouterTestDB(t)
-	store := forgesocial.NewRouteJobStoreForTest(db)
+	store := social.NewRouteJobStoreForTest(db)
 
-	route := forgesocial.Route{
+	route := social.Route{
 		Signal:      smeldr.AfterPublish,
 		ContentType: "Post",
 		AgentURL:    srv.URL,
@@ -108,7 +108,7 @@ func TestRouteWorker_Retries5xx(t *testing.T) {
 	ev := smeldr.SignalEvent{Type: "Post", Slug: "server-error", Timestamp: time.Now().UTC()}
 	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
-	forgesocial.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
+	social.RunDeliveryForTest(db, []byte("test-secret-32-bytes-long-padded!"), srv.Client())
 
 	// After 5xx the job should still be pending (scheduled for future retry).
 	jobs, _ := store.DueJobsForTest(t.Context())
@@ -127,13 +127,13 @@ func TestRouteWorker_SignatureHeader(t *testing.T) {
 	defer srv.Close()
 
 	db := openRouterTestDB(t)
-	store := forgesocial.NewRouteJobStoreForTest(db)
-	route := forgesocial.Route{Signal: smeldr.AfterPublish, ContentType: "Post", AgentURL: srv.URL}
+	store := social.NewRouteJobStoreForTest(db)
+	route := social.Route{Signal: smeldr.AfterPublish, ContentType: "Post", AgentURL: srv.URL}
 	ev := smeldr.SignalEvent{Type: "Post", Slug: "sig-test", Timestamp: time.Now().UTC()}
 	store.EnqueueForTest(route, smeldr.AfterPublish, ev)
 
 	secret := []byte("test-secret-32-bytes-long-padded!")
-	forgesocial.RunDeliveryForTest(db, secret, srv.Client())
+	social.RunDeliveryForTest(db, secret, srv.Client())
 
 	select {
 	case sig := <-sigReceived:

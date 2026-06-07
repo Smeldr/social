@@ -1,4 +1,4 @@
-package forgesocial
+package social
 
 import (
 	"strings"
