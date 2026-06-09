@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -168,6 +169,7 @@ func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaUR
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
+	slog.Debug("social: X upload media request", "method", req.Method, "url", xMediaUploadURL)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("social: X upload media: %w", err)
@@ -176,6 +178,11 @@ func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaUR
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		slog.Warn("social: X upload media non-2xx response",
+			"status", resp.StatusCode,
+			"x_request_id", resp.Header.Get("X-Request-Id"),
+			"body", truncate(string(body), 256),
+		)
 		return "", &publishError{
 			statusCode: resp.StatusCode,
 			msg:        fmt.Sprintf("X upload media: HTTP %d: %s", resp.StatusCode, truncate(string(body), 256)),
@@ -325,6 +332,7 @@ func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred Platf
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	slog.Debug("social: X publish request", "method", req.Method, "url", xAPIBase+"/2/tweets")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("social: X publish: %w", err)
@@ -342,6 +350,11 @@ func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred Platf
 		return "", fmt.Errorf("social: X publish read: %w", err)
 	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		slog.Warn("social: X publish non-2xx response",
+			"status", resp.StatusCode,
+			"x_request_id", resp.Header.Get("X-Request-Id"),
+			"body", truncate(string(body), 256),
+		)
 		return "", &publishError{
 			statusCode: resp.StatusCode,
 			msg:        fmt.Sprintf("X publish: HTTP %d: %s", resp.StatusCode, truncate(string(body), 256)),

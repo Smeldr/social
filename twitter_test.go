@@ -3,12 +3,14 @@ package social
 import (
 	"context"
 	"io"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -268,3 +270,56 @@ func (tr *xAPIRedirectTransport) RoundTrip(req *http.Request) (*http.Response, e
 	}
 	return http.DefaultTransport.RoundTrip(req)
 }
+
+// — publish debug logging ——————————————————————————————————————————————————
+
+// TestPublish_logsWarnOnNonSuccess verifies that a non-2xx response from X
+// triggers a WARN-level slog record containing the HTTP status.
+func TestPublish_logsWarnOnNonSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Request-Id", "req-abc-123")
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":"forbidden"}`))
+	}))
+	defer srv.Close()
+
+	cap := &slogCapture{}
+	orig := slog.Default()
+	slog.SetDefault(slog.New(cap))
+	t.Cleanup(func() { slog.SetDefault(orig) })
+
+	tc := &twitterClient{
+		httpClient: &http.Client{
+			Transport: &xAPIRedirectTransport{apiBase: srv.URL},
+		},
+	}
+	_, err := tc.publish(context.Background(), ScheduledPost{Body: "Hello"}, PlatformCredential{accessToken: "tok"})
+	if err == nil {
+		t.Fatal("expected error for 403 response, got nil")
+	}
+
+	cap.mu.Lock()
+	defer cap.mu.Unlock()
+	for _, r := range cap.records {
+		if r.Level == slog.LevelWarn && strings.Contains(r.Message, "non-2xx") {
+			return // found — test passes
+		}
+	}
+	t.Errorf("expected WARN log containing 'non-2xx', got %d records", len(cap.records))
+}
+
+// slogCapture is a minimal slog.Handler that collects all records.
+type slogCapture struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (c *slogCapture) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (c *slogCapture) Handle(_ context.Context, r slog.Record) error {
+	c.mu.Lock()
+	c.records = append(c.records, r.Clone())
+	c.mu.Unlock()
+	return nil
+}
+func (c *slogCapture) WithAttrs(_ []slog.Attr) slog.Handler  { return c }
+func (c *slogCapture) WithGroup(_ string) slog.Handler       { return c }
