@@ -1,5 +1,15 @@
 # smeldr.dev/social Changelog
 
+## [0.8.3] — 2026-06-09
+
+### Changed
+
+- `uploadXMedia` and `publish`: `slog.Debug` before each outgoing HTTP request
+  (method, URL — no credentials logged); `slog.Warn` on any non-2xx response
+  (status, truncated body ≤256 chars, `X-Request-Id` from X) (A140).
+
+---
+
 ## [0.8.2] — 2026-06-08
 
 ### Fixed
