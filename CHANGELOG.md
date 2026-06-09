@@ -1,5 +1,16 @@
 # smeldr.dev/social Changelog
 
+## [0.8.2] — 2026-06-08
+
+### Fixed
+
+- X post body length validation now counts each URL as 23 characters (t.co
+  weighting) regardless of the URL's actual length. Previously, long URLs were
+  counted at their full rune length, causing valid posts to be incorrectly
+  rejected. New helper `xWeightedBodyLen` + constant `xTcoURLLen = 23` (A138).
+
+---
+
 ## [0.8.1] — 2026-06-07
 
 ### Changed

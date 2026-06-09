@@ -12,6 +12,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 )
 
@@ -19,7 +20,11 @@ const (
 	xAPIBase        = "https://api.twitter.com"
 	xMediaUploadURL = "https://api.x.com/2/media/upload"
 	xAuthBase       = "https://x.com"
-	xMaxBodyLength  = 280
+	xMaxBodyLength = 280
+	// xTcoURLLen is the character count X assigns to any URL after t.co wrapping,
+	// regardless of the URL's actual length.
+	// See: https://developer.twitter.com/en/docs/counting-characters
+	xTcoURLLen = 23
 
 	// xTokenExpiryBuffer is the window before expiry within which an X access
 	// token is proactively refreshed. X tokens expire after 2 hours; refreshing
@@ -269,14 +274,28 @@ func (c *twitterClient) refreshXToken(ctx context.Context, refreshTok string) (x
 	return tr, nil
 }
 
+// xURLRegexp matches http and https URLs in a post body for t.co weighting.
+var xURLRegexp = regexp.MustCompile(`https?://\S+`)
+
+// xWeightedBodyLen returns the X-weighted character count of body.
+// X wraps all URLs with t.co and counts each as exactly xTcoURLLen characters,
+// regardless of the URL's actual length.
+func xWeightedBodyLen(body string) int {
+	total := len([]rune(body))
+	for _, m := range xURLRegexp.FindAllString(body, -1) {
+		total += xTcoURLLen - len([]rune(m))
+	}
+	return total
+}
+
 // publish posts a tweet to X. The post body must not exceed xMaxBodyLength (280)
-// characters. If p.MediaURL is set, the image is uploaded first via uploadXMedia
-// and attached to the tweet.
+// weighted characters (URLs count as xTcoURLLen each). If p.MediaURL is set, the
+// image is uploaded first via uploadXMedia and attached to the tweet.
 // Returns the platform tweet ID on success.
 func (c *twitterClient) publish(ctx context.Context, p ScheduledPost, cred PlatformCredential) (string, error) {
-	if len([]rune(p.Body)) > xMaxBodyLength {
+	if xWeightedBodyLen(p.Body) > xMaxBodyLength {
 		return "", &publishError{
-			msg:      fmt.Sprintf("post body exceeds X character limit (%d/%d)", len([]rune(p.Body)), xMaxBodyLength),
+			msg:      fmt.Sprintf("post body exceeds X character limit (%d/%d)", xWeightedBodyLen(p.Body), xMaxBodyLength),
 			terminal: true,
 		}
 	}

@@ -149,3 +149,122 @@ func (tr *uploadRedirectTransport) RoundTrip(req *http.Request) (*http.Response,
 	}
 	return tr.real.RoundTrip(req)
 }
+
+// — xWeightedBodyLen ——————————————————————————————————————————————————————————
+
+func TestXWeightedBodyLen(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want int
+	}{
+		{
+			name: "no URL",
+			body: strings.Repeat("a", 10),
+			want: 10,
+		},
+		{
+			name: "short URL expands to 23",
+			// "https://x.co" = 12 chars < xTcoURLLen (23); body raw = 6 + 12 = 18,
+			// weighted = 6 + 23 = 29.
+			body: "Hello https://x.co",
+			want: len([]rune("Hello ")) + 23,
+		},
+		{
+			name: "long URL shrinks to 23",
+			// "https://" + 52 "x"s = 60 chars > 23; prefix "Pre: " = 5 chars.
+			// raw = 65, weighted = 5 + 23 = 28.
+			body: "Pre: https://" + strings.Repeat("x", 52),
+			want: 5 + 23,
+		},
+		{
+			name: "two long URLs each weighted to 23",
+			// "a " (2) + URL1 (29) + " b " (3) + URL2 (29) = 63 raw;
+			// weighted = 2 + 23 + 3 + 23 = 51.
+			body: "a https://long1.example.com/foo b https://long2.example.com/bar",
+			want: 2 + 23 + 3 + 23,
+		},
+		{
+			name: "body weighted exactly at limit",
+			// 256 "a"s + " " + 24-char URL = 281 raw;
+			// weighted = 256 + 1 + 23 = 280.
+			body: strings.Repeat("a", 256) + " " + "https://x.co/abc12345678",
+			want: 280,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := xWeightedBodyLen(tc.body)
+			if got != tc.want {
+				t.Errorf("xWeightedBodyLen(%q) = %d, want %d", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// — publish body length (t.co weighting) ————————————————————————————————————
+
+func TestPublishBodyLen_tcoWeighting(t *testing.T) {
+	// longURL is 60 runes — well above xTcoURLLen (23).
+	longURL := "https://" + strings.Repeat("x", 52)
+
+	// acceptedBody: raw = 249 + 1 + 60 = 310 (> 280), weighted = 249 + 1 + 23 = 273 (≤ 280).
+	acceptedBody := strings.Repeat("a", 249) + " " + longURL
+
+	// rejectedBody: raw = 258 + 1 + 60 = 319 (> 280), weighted = 258 + 1 + 23 = 282 (> 280).
+	rejectedBody := strings.Repeat("a", 258) + " " + longURL
+
+	t.Run("raw-over-limit body with long URL is accepted", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"data":{"id":"tweet-1"}}`))
+		}))
+		defer srv.Close()
+
+		tc := &twitterClient{
+			httpClient: &http.Client{
+				Transport: &xAPIRedirectTransport{apiBase: srv.URL},
+			},
+		}
+		_, err := tc.publish(context.Background(), ScheduledPost{Body: acceptedBody}, PlatformCredential{accessToken: "tok"})
+		if err != nil {
+			t.Errorf("publish with weighted-valid body should succeed, got: %v", err)
+		}
+	})
+
+	t.Run("weighted-over-limit body is rejected before HTTP call", func(t *testing.T) {
+		tc := &twitterClient{httpClient: &http.Client{}}
+		_, err := tc.publish(context.Background(), ScheduledPost{Body: rejectedBody}, PlatformCredential{})
+		if err == nil {
+			t.Fatal("expected publishError, got nil")
+		}
+		pe, ok := err.(*publishError)
+		if !ok {
+			t.Fatalf("expected *publishError, got %T: %v", err, err)
+		}
+		if !pe.terminal {
+			t.Errorf("expected terminal=true for body-length error")
+		}
+		if !strings.Contains(pe.msg, "character limit") {
+			t.Errorf("unexpected error message: %s", pe.msg)
+		}
+	})
+}
+
+// xAPIRedirectTransport rewrites requests aimed at xAPIBase to apiBase.
+// Used in tests to avoid real network calls to api.twitter.com.
+type xAPIRedirectTransport struct {
+	apiBase string
+}
+
+func (tr *xAPIRedirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.HasPrefix(req.URL.String(), xAPIBase) {
+		target, _ := url.Parse(tr.apiBase + req.URL.RequestURI())
+		newReq := req.Clone(req.Context())
+		newReq.URL = target
+		newReq.Host = target.Host
+		return http.DefaultTransport.RoundTrip(newReq)
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
