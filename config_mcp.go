@@ -74,7 +74,7 @@ func (m *configModule) MCPSchema() []smeldr.MCPField {
 			JSONName:    "scope",
 			Type:        "string",
 			Required:    false,
-			Description: `Optional: space-separated OAuth 2.0 scopes to request. Mastodon default: "write:statuses write:media". Only applies to Mastodon.`,
+			Description: `Optional: space-separated OAuth 2.0 scopes to request. X default: "tweet.read users.read tweet.write offline.access media.write". Mastodon default: "write:statuses write:media".`,
 		},
 	}
 }

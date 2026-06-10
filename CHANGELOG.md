@@ -1,5 +1,16 @@
 # smeldr.dev/social Changelog
 
+## [0.8.5] — 2026-06-10
+
+### Added
+
+- X OAuth 2.0 scope is now configurable via the `scope` field on
+  `configure_platform`. Default scope includes `media.write` (required for
+  image upload). Existing X credentials must be re-authorized to pick up
+  the new default scope (A142).
+
+---
+
 ## [0.8.4] — 2026-06-10
 
 ### Fixed

@@ -127,6 +127,7 @@ func New(db smeldr.DB, cfg Config) *Social {
 			ClientSecret: dbCfg.ClientSecret,
 			RedirectURL:  dbCfg.RedirectURL,
 			SuccessURL:   dbCfg.SuccessURL,
+			Scopes:       dbCfg.Scopes,
 		})
 	}
 
@@ -221,6 +222,7 @@ func (s *Social) reloadPlatformClient(platform string, cfg PlatformConfig) {
 			ClientSecret: cfg.ClientSecret,
 			RedirectURL:  cfg.RedirectURL,
 			SuccessURL:   cfg.SuccessURL,
+			Scopes:       cfg.Scopes,
 		})
 	}
 }

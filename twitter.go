@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,7 @@ type xConfig struct {
 	ClientSecret string
 	RedirectURL  string
 	SuccessURL   string
+	Scopes       []string
 }
 
 // twitterClient performs OAuth 2.0 PKCE token exchange and API calls against X.
@@ -71,6 +73,16 @@ func generatePKCE() (verifier, challenge string, err error) {
 	return verifier, challenge, nil
 }
 
+// effectiveScope returns the OAuth 2.0 scope string to request.
+// When cfg.Scopes is empty the default includes all scopes required for
+// tweet posting and image upload (media.write).
+func (c *twitterClient) effectiveScope() string {
+	if len(c.cfg.Scopes) == 0 {
+		return "tweet.read users.read tweet.write offline.access media.write"
+	}
+	return strings.Join(c.cfg.Scopes, " ")
+}
+
 // authURL builds the X OAuth 2.0 authorization URL for the given state and
 // code challenge. The user must visit this URL in a browser to authorise.
 func (c *twitterClient) authURL(state, codeChallenge string) string {
@@ -78,7 +90,7 @@ func (c *twitterClient) authURL(state, codeChallenge string) string {
 	v.Set("response_type", "code")
 	v.Set("client_id", c.cfg.ClientID)
 	v.Set("redirect_uri", c.cfg.RedirectURL)
-	v.Set("scope", "tweet.read users.read tweet.write offline.access")
+	v.Set("scope", c.effectiveScope())
 	v.Set("state", state)
 	v.Set("code_challenge", codeChallenge)
 	v.Set("code_challenge_method", "S256")

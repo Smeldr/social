@@ -269,6 +269,24 @@ func (tr *uploadRedirectTransport) RoundTrip(req *http.Request) (*http.Response,
 	return tr.real.RoundTrip(req)
 }
 
+// — effectiveScope ————————————————————————————————————————————————————————————
+
+func TestEffectiveScope(t *testing.T) {
+	t.Run("empty scopes returns default with media.write", func(t *testing.T) {
+		c := newTwitterClient(xConfig{})
+		scope := c.effectiveScope()
+		if !strings.Contains(scope, "media.write") {
+			t.Errorf("expected media.write in default scope, got %q", scope)
+		}
+	})
+	t.Run("non-empty scopes returns joined string", func(t *testing.T) {
+		c := newTwitterClient(xConfig{Scopes: []string{"tweet.read", "tweet.write"}})
+		if got := c.effectiveScope(); got != "tweet.read tweet.write" {
+			t.Errorf("got %q, want %q", got, "tweet.read tweet.write")
+		}
+	})
+}
+
 // — xWeightedBodyLen ——————————————————————————————————————————————————————————
 
 func TestXWeightedBodyLen(t *testing.T) {
