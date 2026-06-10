@@ -11,13 +11,14 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
 // — uploadXMedia ——————————————————————————————————————————————————————————————
 
 func TestUploadXMedia(t *testing.T) {
-	t.Run("happy path returns media ID", func(t *testing.T) {
+	t.Run("happy path returns media ID via INIT/APPEND/FINALIZE", func(t *testing.T) {
 		// Media origin server.
 		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/jpeg")
@@ -25,39 +26,65 @@ func TestUploadXMedia(t *testing.T) {
 		}))
 		defer origin.Close()
 
-		// X upload endpoint.
-		var gotCategory, gotContentType string
+		// X upload endpoint — stateful three-step handler.
+		var callCount atomic.Int32
+		var (
+			gotINITCategory    string
+			gotINITMediaType   string
+			gotINITTotalBytes  string
+			gotAPPENDMediaID   string
+			gotAPPENDSegment   string
+			gotAPPENDPartCT    string
+			gotFINALIZEMediaID string
+		)
 		upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			call := int(callCount.Add(1)) - 1 // 0-based
 			ct, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 			if !strings.HasPrefix(ct, "multipart/") {
-				t.Errorf("expected multipart Content-Type, got %q", ct)
+				t.Errorf("call %d: expected multipart Content-Type, got %q", call, ct)
 			}
 			mr := multipart.NewReader(r.Body, params["boundary"])
+			fields := map[string]string{}
+			var appendPartCT string
 			for {
 				part, err := mr.NextPart()
 				if err == io.EOF {
 					break
 				}
 				if err != nil {
-					t.Fatalf("multipart read: %v", err)
+					t.Fatalf("call %d: multipart read: %v", call, err)
 				}
 				data, _ := io.ReadAll(part)
-				switch part.FormName() {
-				case "media_category":
-					gotCategory = string(data)
-				case "media":
-					gotContentType = part.Header.Get("Content-Type")
+				if part.FormName() == "media" {
+					appendPartCT = part.Header.Get("Content-Type")
+				} else {
+					fields[part.FormName()] = string(data)
 				}
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte(`{"data":{"id":"123456789"}}`))
+			switch call {
+			case 0: // INIT
+				gotINITCategory = fields["media_category"]
+				gotINITMediaType = fields["media_type"]
+				gotINITTotalBytes = fields["total_bytes"]
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				w.Write([]byte(`{"data":{"id":"123456789"}}`))
+			case 1: // APPEND
+				gotAPPENDMediaID = fields["media_id"]
+				gotAPPENDSegment = fields["segment_index"]
+				gotAPPENDPartCT = appendPartCT
+				w.WriteHeader(http.StatusNoContent)
+			case 2: // FINALIZE
+				gotFINALIZEMediaID = fields["media_id"]
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"data":{"id":"123456789"}}`))
+			default:
+				t.Errorf("unexpected call %d to upload endpoint", call)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
 		}))
 		defer upload.Close()
-
-		// Patch the upload URL for this test.
-		origURL := xMediaUploadURL
-		defer func() { _ = origURL }() // xMediaUploadURL is a const; we test via helper below
 
 		mediaID, err := uploadXMediaTo(t, upload.URL, origin.URL+"/img.jpg", "tok")
 		if err != nil {
@@ -66,11 +93,29 @@ func TestUploadXMedia(t *testing.T) {
 		if mediaID != "123456789" {
 			t.Errorf("media ID = %q, want %q", mediaID, "123456789")
 		}
-		if gotCategory != "tweet_image" {
-			t.Errorf("media_category = %q, want %q", gotCategory, "tweet_image")
+		if gotINITCategory != "tweet_image" {
+			t.Errorf("INIT media_category = %q, want %q", gotINITCategory, "tweet_image")
 		}
-		if gotContentType != "image/jpeg" {
-			t.Errorf("Content-Type in media part = %q, want %q", gotContentType, "image/jpeg")
+		if gotINITMediaType != "image/jpeg" {
+			t.Errorf("INIT media_type = %q, want %q", gotINITMediaType, "image/jpeg")
+		}
+		if gotINITTotalBytes == "" {
+			t.Error("INIT total_bytes must not be empty")
+		}
+		if gotAPPENDMediaID != "123456789" {
+			t.Errorf("APPEND media_id = %q, want %q", gotAPPENDMediaID, "123456789")
+		}
+		if gotAPPENDSegment != "0" {
+			t.Errorf("APPEND segment_index = %q, want %q", gotAPPENDSegment, "0")
+		}
+		if gotAPPENDPartCT != "image/jpeg" {
+			t.Errorf("APPEND media part Content-Type = %q, want %q", gotAPPENDPartCT, "image/jpeg")
+		}
+		if gotFINALIZEMediaID != "123456789" {
+			t.Errorf("FINALIZE media_id = %q, want %q", gotFINALIZEMediaID, "123456789")
+		}
+		if n := int(callCount.Load()); n != 3 {
+			t.Errorf("expected 3 upload calls, got %d", n)
 		}
 	})
 
@@ -94,7 +139,7 @@ func TestUploadXMedia(t *testing.T) {
 		}
 	})
 
-	t.Run("upload 403 returns terminal publishError", func(t *testing.T) {
+	t.Run("INIT 403 returns terminal publishError", func(t *testing.T) {
 		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/png")
 			w.Write([]byte("img"))
@@ -116,7 +161,79 @@ func TestUploadXMedia(t *testing.T) {
 			t.Fatalf("expected *publishError, got %T: %v", err, err)
 		}
 		if !pe.terminal {
-			t.Errorf("expected terminal=true for 403")
+			t.Errorf("expected terminal=true for INIT 403")
+		}
+	})
+
+	t.Run("APPEND 403 returns terminal publishError", func(t *testing.T) {
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte("img"))
+		}))
+		defer origin.Close()
+
+		var callCount atomic.Int32
+		upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			call := int(callCount.Add(1)) - 1
+			if call == 0 { // INIT succeeds
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				w.Write([]byte(`{"data":{"id":"999"}}`))
+				return
+			}
+			// APPEND fails
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"forbidden"}`))
+		}))
+		defer upload.Close()
+
+		_, err := uploadXMediaTo(t, upload.URL, origin.URL+"/img.png", "tok")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		pe, ok := err.(*publishError)
+		if !ok {
+			t.Fatalf("expected *publishError, got %T: %v", err, err)
+		}
+		if !pe.terminal {
+			t.Errorf("expected terminal=true for APPEND 403")
+		}
+	})
+
+	t.Run("FINALIZE 403 returns terminal publishError", func(t *testing.T) {
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte("img"))
+		}))
+		defer origin.Close()
+
+		var callCount atomic.Int32
+		upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			call := int(callCount.Add(1)) - 1
+			switch call {
+			case 0: // INIT succeeds
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				w.Write([]byte(`{"data":{"id":"999"}}`))
+			case 1: // APPEND succeeds
+				w.WriteHeader(http.StatusNoContent)
+			default: // FINALIZE fails
+				w.WriteHeader(http.StatusForbidden)
+				w.Write([]byte(`{"error":"forbidden"}`))
+			}
+		}))
+		defer upload.Close()
+
+		_, err := uploadXMediaTo(t, upload.URL, origin.URL+"/img.png", "tok")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		pe, ok := err.(*publishError)
+		if !ok {
+			t.Fatalf("expected *publishError, got %T: %v", err, err)
+		}
+		if !pe.terminal {
+			t.Errorf("expected terminal=true for FINALIZE 403")
 		}
 	})
 }
@@ -321,5 +438,5 @@ func (c *slogCapture) Handle(_ context.Context, r slog.Record) error {
 	c.mu.Unlock()
 	return nil
 }
-func (c *slogCapture) WithAttrs(_ []slog.Attr) slog.Handler  { return c }
-func (c *slogCapture) WithGroup(_ string) slog.Handler       { return c }
+func (c *slogCapture) WithAttrs(_ []slog.Attr) slog.Handler { return c }
+func (c *slogCapture) WithGroup(_ string) slog.Handler      { return c }

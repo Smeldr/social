@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -21,7 +22,7 @@ const (
 	xAPIBase        = "https://api.twitter.com"
 	xMediaUploadURL = "https://api.x.com/2/media/upload"
 	xAuthBase       = "https://x.com"
-	xMaxBodyLength = 280
+	xMaxBodyLength  = 280
 	// xTcoURLLen is the character count X assigns to any URL after t.co wrapping,
 	// regardless of the URL's actual length.
 	// See: https://developer.twitter.com/en/docs/counting-characters
@@ -119,8 +120,9 @@ type xMediaUploadResponse struct {
 	} `json:"data"`
 }
 
-// uploadXMedia fetches the image at mediaURL and uploads it to the X v1.1 media
-// upload endpoint. Returns the media ID string to attach to a tweet.
+// uploadXMedia fetches the image at mediaURL and uploads it to the X v2 media
+// upload endpoint using the mandatory three-step chunked protocol:
+// INIT → APPEND → FINALIZE. Returns the media ID string to attach to a tweet.
 func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaURL string) (string, error) {
 	// Fetch the image bytes.
 	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil)
@@ -144,57 +146,149 @@ func uploadXMedia(ctx context.Context, client *http.Client, accessToken, mediaUR
 		return "", fmt.Errorf("social: X fetch media read: %w", err)
 	}
 
-	// Build multipart body.
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	if err := mw.WriteField("media_category", "tweet_image"); err != nil {
-		return "", fmt.Errorf("social: X media multipart: %w", err)
+	// Step 1 — INIT: declare media type, size, and category; receive media_id.
+	var initBuf bytes.Buffer
+	initMW := multipart.NewWriter(&initBuf)
+	for _, kv := range [][2]string{
+		{"command", "INIT"},
+		{"media_type", contentType},
+		{"total_bytes", strconv.Itoa(len(imgBytes))},
+		{"media_category", "tweet_image"},
+	} {
+		if err := initMW.WriteField(kv[0], kv[1]); err != nil {
+			return "", fmt.Errorf("social: X media INIT multipart: %w", err)
+		}
 	}
-	h := make(map[string][]string)
-	h["Content-Disposition"] = []string{`form-data; name="media"; filename="upload"`}
-	h["Content-Type"] = []string{contentType}
-	fw, err := mw.CreatePart(h)
-	if err != nil {
-		return "", fmt.Errorf("social: X media multipart: %w", err)
-	}
-	if _, err := io.Copy(fw, bytes.NewReader(imgBytes)); err != nil {
-		return "", fmt.Errorf("social: X media multipart write: %w", err)
-	}
-	mw.Close()
+	initMW.Close()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, xMediaUploadURL, &buf)
+	initReq, err := http.NewRequestWithContext(ctx, http.MethodPost, xMediaUploadURL, &initBuf)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("social: X media INIT request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
+	initReq.Header.Set("Authorization", "Bearer "+accessToken)
+	initReq.Header.Set("Content-Type", initMW.FormDataContentType())
 
-	slog.Debug("social: X upload media request", "method", req.Method, "url", xMediaUploadURL)
-	resp, err := client.Do(req)
+	slog.Debug("social: X upload media INIT", "url", xMediaUploadURL)
+	initResp, err := client.Do(initReq)
 	if err != nil {
-		return "", fmt.Errorf("social: X upload media: %w", err)
+		return "", fmt.Errorf("social: X upload media INIT: %w", err)
 	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		slog.Warn("social: X upload media non-2xx response",
-			"status", resp.StatusCode,
-			"x_request_id", resp.Header.Get("X-Request-Id"),
-			"body", truncate(string(body), 256),
+	defer initResp.Body.Close()
+	initBody, _ := io.ReadAll(io.LimitReader(initResp.Body, 64*1024))
+	if initResp.StatusCode != http.StatusOK && initResp.StatusCode != http.StatusCreated {
+		slog.Warn("social: X upload media INIT non-2xx response",
+			"status", initResp.StatusCode,
+			"x_request_id", initResp.Header.Get("X-Request-Id"),
+			"body", truncate(string(initBody), 256),
 		)
 		return "", &publishError{
-			statusCode: resp.StatusCode,
-			msg:        fmt.Sprintf("X upload media: HTTP %d: %s", resp.StatusCode, truncate(string(body), 256)),
-			terminal:   isTerminalStatus(resp.StatusCode),
+			statusCode: initResp.StatusCode,
+			msg:        fmt.Sprintf("X upload media INIT: HTTP %d: %s", initResp.StatusCode, truncate(string(initBody), 256)),
+			terminal:   isTerminalStatus(initResp.StatusCode),
+		}
+	}
+	var initMR xMediaUploadResponse
+	if err := json.Unmarshal(initBody, &initMR); err != nil {
+		return "", fmt.Errorf("social: X upload media INIT parse: %w", err)
+	}
+	mediaID := initMR.Data.ID
+
+	// Step 2 — APPEND: upload the binary image bytes as segment 0.
+	var appendBuf bytes.Buffer
+	appendMW := multipart.NewWriter(&appendBuf)
+	for _, kv := range [][2]string{
+		{"command", "APPEND"},
+		{"media_id", mediaID},
+		{"segment_index", "0"},
+	} {
+		if err := appendMW.WriteField(kv[0], kv[1]); err != nil {
+			return "", fmt.Errorf("social: X media APPEND multipart: %w", err)
+		}
+	}
+	mediaPart := map[string][]string{
+		"Content-Disposition": {`form-data; name="media"; filename="upload"`},
+		"Content-Type":        {contentType},
+	}
+	fw, err := appendMW.CreatePart(mediaPart)
+	if err != nil {
+		return "", fmt.Errorf("social: X media APPEND part: %w", err)
+	}
+	if _, err := io.Copy(fw, bytes.NewReader(imgBytes)); err != nil {
+		return "", fmt.Errorf("social: X media APPEND write: %w", err)
+	}
+	appendMW.Close()
+
+	appendReq, err := http.NewRequestWithContext(ctx, http.MethodPost, xMediaUploadURL, &appendBuf)
+	if err != nil {
+		return "", fmt.Errorf("social: X media APPEND request: %w", err)
+	}
+	appendReq.Header.Set("Authorization", "Bearer "+accessToken)
+	appendReq.Header.Set("Content-Type", appendMW.FormDataContentType())
+
+	slog.Debug("social: X upload media APPEND", "url", xMediaUploadURL)
+	appendResp, err := client.Do(appendReq)
+	if err != nil {
+		return "", fmt.Errorf("social: X upload media APPEND: %w", err)
+	}
+	appendBody, _ := io.ReadAll(io.LimitReader(appendResp.Body, 64*1024))
+	appendResp.Body.Close()
+	if appendResp.StatusCode < 200 || appendResp.StatusCode >= 300 {
+		slog.Warn("social: X upload media APPEND non-2xx response",
+			"status", appendResp.StatusCode,
+			"x_request_id", appendResp.Header.Get("X-Request-Id"),
+			"body", truncate(string(appendBody), 256),
+		)
+		return "", &publishError{
+			statusCode: appendResp.StatusCode,
+			msg:        fmt.Sprintf("X upload media APPEND: HTTP %d: %s", appendResp.StatusCode, truncate(string(appendBody), 256)),
+			terminal:   isTerminalStatus(appendResp.StatusCode),
 		}
 	}
 
-	var mr xMediaUploadResponse
-	if err := json.Unmarshal(body, &mr); err != nil {
-		return "", fmt.Errorf("social: X upload media parse: %w", err)
+	// Step 3 — FINALIZE: confirm the upload and retrieve the final media_id.
+	var finBuf bytes.Buffer
+	finMW := multipart.NewWriter(&finBuf)
+	for _, kv := range [][2]string{
+		{"command", "FINALIZE"},
+		{"media_id", mediaID},
+	} {
+		if err := finMW.WriteField(kv[0], kv[1]); err != nil {
+			return "", fmt.Errorf("social: X media FINALIZE multipart: %w", err)
+		}
 	}
-	return mr.Data.ID, nil
+	finMW.Close()
+
+	finReq, err := http.NewRequestWithContext(ctx, http.MethodPost, xMediaUploadURL, &finBuf)
+	if err != nil {
+		return "", fmt.Errorf("social: X media FINALIZE request: %w", err)
+	}
+	finReq.Header.Set("Authorization", "Bearer "+accessToken)
+	finReq.Header.Set("Content-Type", finMW.FormDataContentType())
+
+	slog.Debug("social: X upload media FINALIZE", "url", xMediaUploadURL)
+	finResp, err := client.Do(finReq)
+	if err != nil {
+		return "", fmt.Errorf("social: X upload media FINALIZE: %w", err)
+	}
+	defer finResp.Body.Close()
+	finBody, _ := io.ReadAll(io.LimitReader(finResp.Body, 64*1024))
+	if finResp.StatusCode != http.StatusOK && finResp.StatusCode != http.StatusCreated {
+		slog.Warn("social: X upload media FINALIZE non-2xx response",
+			"status", finResp.StatusCode,
+			"x_request_id", finResp.Header.Get("X-Request-Id"),
+			"body", truncate(string(finBody), 256),
+		)
+		return "", &publishError{
+			statusCode: finResp.StatusCode,
+			msg:        fmt.Sprintf("X upload media FINALIZE: HTTP %d: %s", finResp.StatusCode, truncate(string(finBody), 256)),
+			terminal:   isTerminalStatus(finResp.StatusCode),
+		}
+	}
+	var finMR xMediaUploadResponse
+	if err := json.Unmarshal(finBody, &finMR); err != nil {
+		return "", fmt.Errorf("social: X upload media FINALIZE parse: %w", err)
+	}
+	return finMR.Data.ID, nil
 }
 
 // exchangeCode exchanges an authorization code for an access token using PKCE.

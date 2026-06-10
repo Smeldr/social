@@ -1,5 +1,16 @@
 # smeldr.dev/social Changelog
 
+## [0.8.4] — 2026-06-10
+
+### Fixed
+
+- X media upload: replace single-POST with INIT/APPEND/FINALIZE three-step
+  chunked protocol required by the v2 `/2/media/upload` endpoint. Omitting
+  the `command` field caused every media upload to fail with a gateway 403
+  before reaching X's API handler (A141).
+
+---
+
 ## [0.8.3] — 2026-06-09
 
 ### Changed
