@@ -113,7 +113,7 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 	// Check for existing row.
 	var existingID string
 	err = cs.db.QueryRowContext(context.Background(),
-		`SELECT id FROM forge_social_credentials WHERE platform=? AND instance_url=?`,
+		`SELECT id FROM smeldr_social_credentials WHERE platform=? AND instance_url=?`,
 		platform, instanceURL,
 	).Scan(&existingID)
 
@@ -124,7 +124,7 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 	if existingID != "" {
 		// Update existing credential.
 		_, err = cs.db.ExecContext(context.Background(), `
-			UPDATE forge_social_credentials
+			UPDATE smeldr_social_credentials
 			SET name=?, actor_id=?, access_token=?, refresh_token=?, expires_at=?, updated_at=?
 			WHERE id=?`,
 			name, actorID, encAccess, encRefresh, nullTime(expiresAt), now, existingID,
@@ -135,7 +135,7 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 	// Insert new credential.
 	id := smeldr.NewID()
 	_, err = cs.db.ExecContext(context.Background(), `
-		INSERT INTO forge_social_credentials
+		INSERT INTO smeldr_social_credentials
 			(id, platform, name, instance_url, actor_id, access_token, refresh_token, expires_at, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, platform, name, instanceURL, actorID,
@@ -154,7 +154,7 @@ func (cs *credentialStore) getCredential(id string) (PlatformCredential, error) 
 	err := cs.db.QueryRowContext(context.Background(), `
 		SELECT id, platform, name, instance_url, actor_id, access_token, refresh_token,
 		       expires_at, created_at, updated_at
-		FROM forge_social_credentials WHERE id=?`, id,
+		FROM smeldr_social_credentials WHERE id=?`, id,
 	).Scan(
 		&c.ID, &c.Platform, &c.Name, &c.InstanceURL, &c.ActorID,
 		&encAccess, &encRefresh,
@@ -187,7 +187,7 @@ func (cs *credentialStore) getCredential(id string) (PlatformCredential, error) 
 func (cs *credentialStore) listCredentials() ([]PlatformCredential, error) {
 	rows, err := cs.db.QueryContext(context.Background(), `
 		SELECT id, platform, name, instance_url, actor_id, expires_at, created_at, updated_at
-		FROM forge_social_credentials
+		FROM smeldr_social_credentials
 		ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (cs *credentialStore) listCredentials() ([]PlatformCredential, error) {
 // Returns smeldr.ErrNotFound when no row exists.
 func (cs *credentialStore) deleteCredential(id string) error {
 	res, err := cs.db.ExecContext(context.Background(),
-		`DELETE FROM forge_social_credentials WHERE id=?`, id)
+		`DELETE FROM smeldr_social_credentials WHERE id=?`, id)
 	if err != nil {
 		return err
 	}

@@ -57,7 +57,7 @@ func insertSchedule(db smeldr.DB, s PublicationSchedule) error {
 		return fmt.Errorf("social: marshal slots: %w", err)
 	}
 	_, err = db.ExecContext(context.Background(), `
-		INSERT INTO forge_social_publication_schedules
+		INSERT INTO smeldr_social_publication_schedules
 			(id, credential_id, slots, status, last_tick_at, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.CredentialID, string(slotsJSON), string(s.Status),
@@ -72,7 +72,7 @@ func updateSchedule(db smeldr.DB, s PublicationSchedule) error {
 		return fmt.Errorf("social: marshal slots: %w", err)
 	}
 	_, err = db.ExecContext(context.Background(), `
-		UPDATE forge_social_publication_schedules
+		UPDATE smeldr_social_publication_schedules
 		SET slots=?, status=?, updated_at=?
 		WHERE id=?`,
 		string(slotsJSON), string(s.Status), time.Now().UTC(), s.ID,
@@ -83,7 +83,7 @@ func updateSchedule(db smeldr.DB, s PublicationSchedule) error {
 // updateScheduleLastTick records the last time the scheduler ticked this schedule.
 func updateScheduleLastTick(db smeldr.DB, id string, t time.Time) error {
 	_, err := db.ExecContext(context.Background(), `
-		UPDATE forge_social_publication_schedules
+		UPDATE smeldr_social_publication_schedules
 		SET last_tick_at=?, updated_at=?
 		WHERE id=?`,
 		t, t, id,
@@ -94,13 +94,13 @@ func updateScheduleLastTick(db smeldr.DB, id string, t time.Time) error {
 func getSchedule(db smeldr.DB, id string) (PublicationSchedule, error) {
 	return scanSchedule(db.QueryRowContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
-		FROM forge_social_publication_schedules WHERE id=?`, id))
+		FROM smeldr_social_publication_schedules WHERE id=?`, id))
 }
 
 func listSchedules(db smeldr.DB) ([]PublicationSchedule, error) {
 	rows, err := db.QueryContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
-		FROM forge_social_publication_schedules
+		FROM smeldr_social_publication_schedules
 		ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func listSchedules(db smeldr.DB) ([]PublicationSchedule, error) {
 func listActiveSchedules(db smeldr.DB) ([]PublicationSchedule, error) {
 	rows, err := db.QueryContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at
-		FROM forge_social_publication_schedules
+		FROM smeldr_social_publication_schedules
 		WHERE status='active'
 		ORDER BY created_at ASC`)
 	if err != nil {
@@ -143,7 +143,7 @@ func listActiveSchedules(db smeldr.DB) ([]PublicationSchedule, error) {
 
 func deleteSchedule(db smeldr.DB, id string) error {
 	res, err := db.ExecContext(context.Background(),
-		`DELETE FROM forge_social_publication_schedules WHERE id=?`, id)
+		`DELETE FROM smeldr_social_publication_schedules WHERE id=?`, id)
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func dequeueOldestQueued(db smeldr.DB, credentialID string) (ScheduledPost, erro
 	err := db.QueryRowContext(context.Background(), `
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
-		FROM forge_social_posts
+		FROM smeldr_social_posts
 		WHERE credential_id=? AND status='queued'
 		ORDER BY created_at ASC
 		LIMIT 1`, credentialID,

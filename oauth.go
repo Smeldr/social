@@ -20,7 +20,7 @@ const oauthStateTTL = 10 * time.Minute
 // pass an empty string for Mastodon and LinkedIn.
 func insertOAuthState(db smeldr.DB, state, platform, codeVerifier string) error {
 	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO forge_social_oauth_states (state, platform, code_verifier, created_at)
+		INSERT INTO smeldr_social_oauth_states (state, platform, code_verifier, created_at)
 		VALUES (?, ?, ?, ?)`,
 		state, platform, codeVerifier, time.Now().UTC(),
 	)
@@ -34,7 +34,7 @@ func insertOAuthState(db smeldr.DB, state, platform, codeVerifier string) error 
 func consumeOAuthState(db smeldr.DB, state string) (platform, codeVerifier string, err error) {
 	var createdAt time.Time
 	err = db.QueryRowContext(context.Background(), `
-		SELECT platform, code_verifier, created_at FROM forge_social_oauth_states WHERE state=?`, state,
+		SELECT platform, code_verifier, created_at FROM smeldr_social_oauth_states WHERE state=?`, state,
 	).Scan(&platform, &codeVerifier, &createdAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -46,7 +46,7 @@ func consumeOAuthState(db smeldr.DB, state string) (platform, codeVerifier strin
 
 	// Delete regardless of TTL — state is single-use.
 	_, _ = db.ExecContext(context.Background(),
-		`DELETE FROM forge_social_oauth_states WHERE state=?`, state)
+		`DELETE FROM smeldr_social_oauth_states WHERE state=?`, state)
 
 	if time.Since(createdAt) > oauthStateTTL {
 		return "", "", fmt.Errorf("social: OAuth state expired")
@@ -60,7 +60,7 @@ func consumeOAuthState(db smeldr.DB, state string) (platform, codeVerifier strin
 func purgeExpiredOAuthStates(db smeldr.DB) error {
 	cutoff := time.Now().UTC().Add(-oauthStateTTL)
 	_, err := db.ExecContext(context.Background(),
-		`DELETE FROM forge_social_oauth_states WHERE created_at < ?`, cutoff)
+		`DELETE FROM smeldr_social_oauth_states WHERE created_at < ?`, cutoff)
 	return err
 }
 

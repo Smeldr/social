@@ -34,7 +34,7 @@ type routeJob struct {
 	CreatedAt   time.Time
 }
 
-// routeJobStore wraps DB operations for forge_social_route_jobs.
+// routeJobStore wraps DB operations for smeldr_social_route_jobs.
 type routeJobStore struct {
 	db smeldr.DB
 }
@@ -49,7 +49,7 @@ func (s *routeJobStore) enqueue(route Route, sig smeldr.Signal, ev smeldr.Signal
 	}
 	now := time.Now().UTC()
 	_, err = s.db.ExecContext(context.Background(),
-		`INSERT INTO forge_social_route_jobs
+		`INSERT INTO smeldr_social_route_jobs
 		 (id, signal, content_type, agent_url, payload, status, attempts, next_attempt, last_error, created_at)
 		 VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, '', ?)`,
 		smeldr.NewID(),
@@ -70,7 +70,7 @@ func (s *routeJobStore) enqueue(route Route, sig smeldr.Signal, ev smeldr.Signal
 func (s *routeJobStore) dueJobs(ctx context.Context) ([]routeJob, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, signal, content_type, agent_url, payload, status, attempts, next_attempt, last_error, created_at
-		 FROM forge_social_route_jobs
+		 FROM smeldr_social_route_jobs
 		 WHERE status = 'pending' AND (next_attempt IS NULL OR next_attempt <= ?)
 		 ORDER BY next_attempt ASC
 		 LIMIT 50`,
@@ -96,29 +96,29 @@ func (s *routeJobStore) dueJobs(ctx context.Context) ([]routeJob, error) {
 // markDelivered marks a job as successfully delivered.
 func (s *routeJobStore) markDelivered(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE forge_social_route_jobs SET status = 'delivered', last_error = '' WHERE id = ?`, id)
+		`UPDATE smeldr_social_route_jobs SET status = 'delivered', last_error = '' WHERE id = ?`, id)
 	return err
 }
 
 // markFailed marks a job as terminally failed.
 func (s *routeJobStore) markFailed(ctx context.Context, id string, msg string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE forge_social_route_jobs SET status = 'failed', last_error = ? WHERE id = ?`, msg, id)
+		`UPDATE smeldr_social_route_jobs SET status = 'failed', last_error = ? WHERE id = ?`, msg, id)
 	return err
 }
 
 // scheduleRetry increments attempts and sets next_attempt for the next retry.
 func (s *routeJobStore) scheduleRetry(ctx context.Context, id string, attempts int, nextAt time.Time, errMsg string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE forge_social_route_jobs SET attempts = ?, next_attempt = ?, last_error = ? WHERE id = ?`,
+		`UPDATE smeldr_social_route_jobs SET attempts = ?, next_attempt = ?, last_error = ? WHERE id = ?`,
 		attempts, nextAt, errMsg, id)
 	return err
 }
 
-// logAttempt records one delivery attempt in forge_social_route_log.
+// logAttempt records one delivery attempt in smeldr_social_route_log.
 func (s *routeJobStore) logAttempt(ctx context.Context, jobID string, attempt, statusCode int, errMsg string) {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO forge_social_route_log (id, job_id, attempt, status_code, error, attempted_at)
+		`INSERT INTO smeldr_social_route_log (id, job_id, attempt, status_code, error, attempted_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		smeldr.NewID(), jobID, attempt, statusCode, errMsg, time.Now().UTC(),
 	)

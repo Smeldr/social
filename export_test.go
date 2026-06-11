@@ -75,7 +75,7 @@ func RunDeliveryForTest(db smeldr.DB, secret []byte, hc *http.Client) {
 func GetFailedJobsForTest(db smeldr.DB) []routeJob {
 	rows, err := db.QueryContext(context.Background(),
 		`SELECT id, signal, content_type, agent_url, payload, status, attempts, next_attempt, last_error, created_at
-		 FROM forge_social_route_jobs WHERE status = 'failed'`)
+		 FROM smeldr_social_route_jobs WHERE status = 'failed'`)
 	if err != nil {
 		return nil
 	}

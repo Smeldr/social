@@ -400,7 +400,8 @@ func TestMigration_ActorIDColumn(t *testing.T) {
 	}
 
 	// Verify actor_id column exists by inserting a row.
-	_, err = db.Exec(`INSERT INTO forge_social_credentials
+	// Table was renamed from forge_social_credentials to smeldr_social_credentials by migration.
+	_, err = db.Exec(`INSERT INTO smeldr_social_credentials
 		(id, platform, name, instance_url, actor_id, access_token, created_at, updated_at)
 		VALUES ('id1','mastodon','test','https://m.social','','enc_token',
 		        datetime('now'), datetime('now'))`)

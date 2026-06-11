@@ -8,15 +8,19 @@ import (
 	"smeldr.dev/core"
 )
 
-// CreateTables creates all forge_social_* database tables and indexes.
+// CreateTables creates all smeldr_social_* database tables and indexes.
 // It is safe to call multiple times — all statements use CREATE ... IF NOT EXISTS.
 // Call this once at application startup before any other social operations.
 //
-// It also applies an idempotent migration that adds the actor_id column to
-// forge_social_credentials for databases created before v0.2.0.
+// It also applies idempotent migrations that rename legacy forge_social_* tables
+// and add columns introduced in earlier minor versions.
 func CreateTables(db smeldr.DB) error {
+	if err := migrateLegacyTableNames(context.Background(), db); err != nil {
+		return fmt.Errorf("social: migrate tables: %w", err)
+	}
+
 	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS forge_social_credentials (
+		`CREATE TABLE IF NOT EXISTS smeldr_social_credentials (
 			id            TEXT PRIMARY KEY,
 			platform      TEXT NOT NULL,
 			name          TEXT NOT NULL,
@@ -28,10 +32,10 @@ func CreateTables(db smeldr.DB) error {
 			created_at    DATETIME NOT NULL,
 			updated_at    DATETIME NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS forge_social_posts (
+		`CREATE TABLE IF NOT EXISTS smeldr_social_posts (
 			id               TEXT PRIMARY KEY,
 			platform         TEXT NOT NULL DEFAULT 'mastodon',
-			credential_id    TEXT NOT NULL REFERENCES forge_social_credentials(id),
+			credential_id    TEXT NOT NULL REFERENCES smeldr_social_credentials(id),
 			body             TEXT NOT NULL,
 			media_url        TEXT NOT NULL DEFAULT '',
 			alt_text         TEXT NOT NULL DEFAULT '',
@@ -42,22 +46,22 @@ func CreateTables(db smeldr.DB) error {
 			created_at       DATETIME NOT NULL,
 			updated_at       DATETIME NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS forge_social_oauth_states (
+		`CREATE TABLE IF NOT EXISTS smeldr_social_oauth_states (
 			state      TEXT PRIMARY KEY,
 			platform   TEXT NOT NULL,
 			created_at DATETIME NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS forge_social_delivery_log (
+		`CREATE TABLE IF NOT EXISTS smeldr_social_delivery_log (
 			id           TEXT PRIMARY KEY,
-			post_id      TEXT NOT NULL REFERENCES forge_social_posts(id),
+			post_id      TEXT NOT NULL REFERENCES smeldr_social_posts(id),
 			attempt      INTEGER NOT NULL,
 			status_code  INTEGER NOT NULL DEFAULT 0,
 			error        TEXT NOT NULL DEFAULT '',
 			attempted_at DATETIME NOT NULL
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_forge_social_posts_status_scheduled
-			ON forge_social_posts(status, scheduled_at)`,
-		`CREATE TABLE IF NOT EXISTS forge_social_route_jobs (
+		`CREATE INDEX IF NOT EXISTS idx_smeldr_social_posts_status_scheduled
+			ON smeldr_social_posts(status, scheduled_at)`,
+		`CREATE TABLE IF NOT EXISTS smeldr_social_route_jobs (
 			id           TEXT PRIMARY KEY,
 			signal       TEXT NOT NULL,
 			content_type TEXT NOT NULL,
@@ -69,17 +73,17 @@ func CreateTables(db smeldr.DB) error {
 			last_error   TEXT NOT NULL DEFAULT '',
 			created_at   DATETIME NOT NULL
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_forge_social_route_jobs_status
-			ON forge_social_route_jobs(status, next_attempt)`,
-		`CREATE TABLE IF NOT EXISTS forge_social_route_log (
+		`CREATE INDEX IF NOT EXISTS idx_smeldr_social_route_jobs_status
+			ON smeldr_social_route_jobs(status, next_attempt)`,
+		`CREATE TABLE IF NOT EXISTS smeldr_social_route_log (
 			id           TEXT PRIMARY KEY,
-			job_id       TEXT NOT NULL REFERENCES forge_social_route_jobs(id),
+			job_id       TEXT NOT NULL REFERENCES smeldr_social_route_jobs(id),
 			attempt      INTEGER NOT NULL,
 			status_code  INTEGER NOT NULL DEFAULT 0,
 			error        TEXT NOT NULL DEFAULT '',
 			attempted_at DATETIME NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS forge_social_publication_schedules (
+		`CREATE TABLE IF NOT EXISTS smeldr_social_publication_schedules (
 			id            TEXT PRIMARY KEY,
 			credential_id TEXT NOT NULL UNIQUE,
 			slots         TEXT NOT NULL DEFAULT '[]',
@@ -88,9 +92,9 @@ func CreateTables(db smeldr.DB) error {
 			created_at    DATETIME NOT NULL,
 			updated_at    DATETIME NOT NULL
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_forge_social_pub_schedules_status
-			ON forge_social_publication_schedules(status)`,
-		`CREATE TABLE IF NOT EXISTS forge_social_platform_config (
+		`CREATE INDEX IF NOT EXISTS idx_smeldr_social_pub_schedules_status
+			ON smeldr_social_publication_schedules(status)`,
+		`CREATE TABLE IF NOT EXISTS smeldr_social_platform_config (
 			platform   TEXT PRIMARY KEY,
 			config     TEXT NOT NULL,
 			updated_at DATETIME NOT NULL
@@ -109,7 +113,7 @@ func CreateTables(db smeldr.DB) error {
 	// "duplicate column name" which we swallow. On an existing v0.1.0 database the
 	// ALTER TABLE adds the column.
 	_, err := db.ExecContext(ctx,
-		`ALTER TABLE forge_social_credentials ADD COLUMN actor_id TEXT NOT NULL DEFAULT ''`)
+		`ALTER TABLE smeldr_social_credentials ADD COLUMN actor_id TEXT NOT NULL DEFAULT ''`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("social: migrate actor_id: %w", err)
 	}
@@ -117,7 +121,7 @@ func CreateTables(db smeldr.DB) error {
 	// Idempotent migration: add code_verifier column for databases created before v0.5.0.
 	// Stores the PKCE code_verifier for the X OAuth 2.0 flow; empty string for other platforms.
 	_, err = db.ExecContext(ctx,
-		`ALTER TABLE forge_social_oauth_states ADD COLUMN code_verifier TEXT NOT NULL DEFAULT ''`)
+		`ALTER TABLE smeldr_social_oauth_states ADD COLUMN code_verifier TEXT NOT NULL DEFAULT ''`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("social: migrate code_verifier: %w", err)
 	}

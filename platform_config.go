@@ -18,7 +18,7 @@ import (
 )
 
 // PlatformConfig holds the operator-supplied OAuth 2.0 app credentials for a
-// social platform. One row per platform in forge_social_platform_config.
+// social platform. One row per platform in smeldr_social_platform_config.
 type PlatformConfig struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
@@ -99,7 +99,7 @@ func (s *platformConfigStore) save(platform string, cfg PlatformConfig) error {
 		return fmt.Errorf("social: encrypt platform config: %w", err)
 	}
 	_, err = s.db.ExecContext(context.Background(), `
-		INSERT INTO forge_social_platform_config (platform, config, updated_at)
+		INSERT INTO smeldr_social_platform_config (platform, config, updated_at)
 		VALUES (?, ?, ?)
 		ON CONFLICT(platform) DO UPDATE SET config=excluded.config, updated_at=excluded.updated_at`,
 		platform, enc, time.Now().UTC(),
@@ -112,7 +112,7 @@ func (s *platformConfigStore) save(platform string, cfg PlatformConfig) error {
 func (s *platformConfigStore) load(platform string) (PlatformConfig, bool, error) {
 	var enc string
 	err := s.db.QueryRowContext(context.Background(),
-		`SELECT config FROM forge_social_platform_config WHERE platform=?`, platform,
+		`SELECT config FROM smeldr_social_platform_config WHERE platform=?`, platform,
 	).Scan(&enc)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlatformConfig{}, false, nil

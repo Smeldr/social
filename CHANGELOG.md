@@ -1,5 +1,16 @@
 # smeldr.dev/social Changelog
 
+## [0.9.0] — 2026-06-11
+
+### Changed
+
+- SQLite table names renamed from `forge_social_*` to `smeldr_social_*` (8 tables).
+  Existing databases are migrated automatically at startup via an idempotent
+  `ALTER TABLE … RENAME TO` pass that runs before `CREATE TABLE IF NOT EXISTS`
+  statements in `CreateTables`. No action required for fresh installs.
+
+---
+
 ## [0.8.5] — 2026-06-10
 
 ### Added

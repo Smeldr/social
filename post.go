@@ -53,7 +53,7 @@ func (p ScheduledPost) GetSlug() string { return p.ID }
 // insertPost inserts a new ScheduledPost row.
 func insertPost(db smeldr.DB, p ScheduledPost) error {
 	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO forge_social_posts
+		INSERT INTO smeldr_social_posts
 			(id, platform, credential_id, body, media_url, alt_text,
 			 scheduled_at, status, platform_post_id, error_msg, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -67,7 +67,7 @@ func insertPost(db smeldr.DB, p ScheduledPost) error {
 // updatePost applies a full row update (all mutable fields) to the post with p.ID.
 func updatePost(db smeldr.DB, p ScheduledPost) error {
 	_, err := db.ExecContext(context.Background(), `
-		UPDATE forge_social_posts
+		UPDATE smeldr_social_posts
 		SET body=?, media_url=?, alt_text=?, scheduled_at=?, status=?,
 		    platform_post_id=?, error_msg=?, updated_at=?
 		WHERE id=?`,
@@ -81,7 +81,7 @@ func updatePost(db smeldr.DB, p ScheduledPost) error {
 // markPostPublished sets status=published, platform_post_id, and updated_at.
 func markPostPublished(db smeldr.DB, id, platformPostID string) error {
 	_, err := db.ExecContext(context.Background(), `
-		UPDATE forge_social_posts
+		UPDATE smeldr_social_posts
 		SET status='published', platform_post_id=?, error_msg='', updated_at=?
 		WHERE id=?`,
 		platformPostID, time.Now().UTC(), id,
@@ -92,7 +92,7 @@ func markPostPublished(db smeldr.DB, id, platformPostID string) error {
 // markPostFailed sets status=failed and error_msg.
 func markPostFailed(db smeldr.DB, id, errMsg string) error {
 	_, err := db.ExecContext(context.Background(), `
-		UPDATE forge_social_posts
+		UPDATE smeldr_social_posts
 		SET status='failed', error_msg=?, updated_at=?
 		WHERE id=?`,
 		errMsg, time.Now().UTC(), id,
@@ -108,7 +108,7 @@ func getPost(db smeldr.DB, id string) (ScheduledPost, error) {
 	err := db.QueryRowContext(context.Background(), `
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
-		FROM forge_social_posts WHERE id=?`, id,
+		FROM smeldr_social_posts WHERE id=?`, id,
 	).Scan(
 		&p.ID, &p.Platform, &p.CredentialID, &p.Body, &p.MediaURL, &p.AltText,
 		&scheduledAt, &p.Status, &p.PlatformPostID, &p.ErrorMsg,
@@ -133,7 +133,7 @@ func listPosts(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 	query := `
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
-		FROM forge_social_posts`
+		FROM smeldr_social_posts`
 	var args []any
 	if len(statuses) > 0 {
 		query += " WHERE status IN ("
@@ -178,7 +178,7 @@ func listPosts(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 // Returns smeldr.ErrNotFound when no row exists.
 func deletePost(db smeldr.DB, id string) error {
 	res, err := db.ExecContext(context.Background(),
-		`DELETE FROM forge_social_posts WHERE id=?`, id)
+		`DELETE FROM smeldr_social_posts WHERE id=?`, id)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func duePosts(db smeldr.DB) ([]ScheduledPost, error) {
 	rows, err := db.QueryContext(context.Background(), `
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
-		FROM forge_social_posts
+		FROM smeldr_social_posts
 		WHERE status='scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?
 		ORDER BY scheduled_at ASC`,
 		time.Now().UTC(),
@@ -231,7 +231,7 @@ func nextScheduledAt(db smeldr.DB) (*time.Time, error) {
 	var t sql.NullTime
 	err := db.QueryRowContext(context.Background(), `
 		SELECT MIN(scheduled_at)
-		FROM forge_social_posts
+		FROM smeldr_social_posts
 		WHERE status='scheduled' AND scheduled_at IS NOT NULL`,
 	).Scan(&t)
 	if err != nil {
@@ -244,10 +244,10 @@ func nextScheduledAt(db smeldr.DB) (*time.Time, error) {
 	return &v, nil
 }
 
-// logDeliveryAttempt records a publish attempt in forge_social_delivery_log.
+// logDeliveryAttempt records a publish attempt in smeldr_social_delivery_log.
 func logDeliveryAttempt(db smeldr.DB, postID string, attempt, statusCode int, errMsg string) error {
 	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO forge_social_delivery_log
+		INSERT INTO smeldr_social_delivery_log
 			(id, post_id, attempt, status_code, error, attempted_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
 		smeldr.NewID(), postID, attempt, statusCode, errMsg, time.Now().UTC(),
@@ -259,7 +259,7 @@ func logDeliveryAttempt(db smeldr.DB, postID string, attempt, statusCode int, er
 func deliveryAttemptCount(db smeldr.DB, postID string) (int, error) {
 	var n int
 	err := db.QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM forge_social_delivery_log WHERE post_id=?`, postID,
+		`SELECT COUNT(*) FROM smeldr_social_delivery_log WHERE post_id=?`, postID,
 	).Scan(&n)
 	return n, err
 }
