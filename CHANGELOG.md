@@ -1,5 +1,15 @@
 # smeldr.dev/social Changelog
 
+## [0.9.2] — 2026-06-30
+
+### Changed
+- `smeldr.Signal` renamed to `smeldr.LifecycleEvent` in route.go, router.go,
+  and export_test.go to follow the core API rename. (A183)
+- `smeldr.dev/core` dependency bumped from v1.44.3 to v1.45.0 (LifecycleEvent rename +
+  orchestration types). (A183)
+
+---
+
 ## [0.9.1] — 2026-06-30
 
 ### Changed

@@ -13,7 +13,7 @@ import (
 // Router holds the registered routes and the route delivery worker.
 // It is created by [AddRoutes] and owned by [Social].
 type Router struct {
-	routes map[smeldr.Signal][]Route // keyed by signal; read-only after AddRoutes
+	routes map[smeldr.LifecycleEvent][]Route // keyed by signal; read-only after AddRoutes
 	jobs   *routeJobStore
 	secret []byte
 	stopCh chan struct{} // closed by stopWorker to signal the goroutine to exit
@@ -41,7 +41,7 @@ type routeJobStore struct {
 
 // enqueue inserts a pending delivery job for route. sig is the matched signal.
 // Errors are logged without returning — partial fan-out is preferred over aborting.
-func (s *routeJobStore) enqueue(route Route, sig smeldr.Signal, ev smeldr.SignalEvent) {
+func (s *routeJobStore) enqueue(route Route, sig smeldr.LifecycleEvent, ev smeldr.SignalEvent) {
 	payload, err := json.Marshal(ev)
 	if err != nil {
 		log.Printf("social: router: marshal signal event: %v", err)
@@ -130,7 +130,7 @@ func (s *routeJobStore) logAttempt(ctx context.Context, jobID string, attempt, s
 // handle returns a signal bus callback for the given signal. It is called from
 // the Smeldr App's signal bus goroutine and must return quickly. It looks up
 // matching routes for (sig, ev.Type) and enqueues one DB job per match.
-func (r *Router) handle(sig smeldr.Signal) func(context.Context, smeldr.SignalEvent) error {
+func (r *Router) handle(sig smeldr.LifecycleEvent) func(context.Context, smeldr.SignalEvent) error {
 	return func(_ context.Context, ev smeldr.SignalEvent) error {
 		candidates := r.routes[sig]
 		for _, route := range candidates {
@@ -163,7 +163,7 @@ func (s *Social) AddRoutes(app *smeldr.App, routes ...Route) {
 
 	// Build the signal→routes map. Multiple routes with the same signal are
 	// collected into a single slice for O(1) dispatch lookup.
-	bySignal := make(map[smeldr.Signal][]Route)
+	bySignal := make(map[smeldr.LifecycleEvent][]Route)
 	for _, r := range routes {
 		bySignal[r.Signal] = append(bySignal[r.Signal], r)
 	}

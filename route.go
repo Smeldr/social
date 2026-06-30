@@ -18,7 +18,7 @@ import (
 // [OnDelete] to construct Route values.
 type Route struct {
 	// Signal is the Smeldr lifecycle signal this route responds to.
-	Signal smeldr.Signal
+	Signal smeldr.LifecycleEvent
 
 	// ContentType is the Go type name of the content type (e.g. "Post", "Story").
 	// Matching is exact. Use the PascalCase struct name exactly as it appears

@@ -3,7 +3,7 @@
 Social post scheduling and AI agent routing for [Forge](https://smeldr.dev) applications.
 
 [![Go Reference](https://pkg.go.dev/badge/smeldr.dev/social.svg)](https://pkg.go.dev/smeldr.dev/social)
-**v0.9.1 — stable.** See [CHANGELOG.md](CHANGELOG.md).
+**v0.9.2 — stable.** See [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 go get smeldr.dev/social@latest

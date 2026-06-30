@@ -36,7 +36,7 @@ func NewRouteJobStoreForTest(db smeldr.DB) *RouteJobStoreForTest {
 }
 
 // EnqueueForTest enqueues one job for the given route, signal, and event.
-func (s *RouteJobStoreForTest) EnqueueForTest(r Route, sig smeldr.Signal, ev smeldr.SignalEvent) {
+func (s *RouteJobStoreForTest) EnqueueForTest(r Route, sig smeldr.LifecycleEvent, ev smeldr.SignalEvent) {
 	s.inner.enqueue(r, sig, ev)
 }
 
