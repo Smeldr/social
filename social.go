@@ -38,6 +38,7 @@ package social
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 
@@ -146,6 +147,34 @@ func New(db smeldr.DB, cfg Config) *Social {
 //
 // Call [Social.Stop] in your shutdown handler to drain the scheduler.
 func (s *Social) Register(app *smeldr.App) {
+	if err := app.RegisterFlow(smeldr.StateFlow{
+		Name:     "scheduled-post",
+		TypeName: "ScheduledPost",
+		States: []smeldr.State{
+			{Name: "draft", IsInitial: true},
+			{Name: "scheduled"},
+			{Name: "queued"},
+			{Name: "delivered", IsTerminal: true},
+			{Name: "partial"},
+			{Name: "failed"},
+			{Name: "archived", IsTerminal: true},
+		},
+		Transitions: []smeldr.Transition{
+			{From: "draft", To: "scheduled"},
+			{From: "scheduled", To: "queued"},
+			{From: "queued", To: "delivered"},
+			{From: "queued", To: "partial"},
+			{From: "queued", To: "failed"},
+			{From: "partial", To: "queued"},
+			{From: "failed", To: "queued"},
+			{From: "delivered", To: "archived"},
+			{From: "partial", To: "archived"},
+			{From: "failed", To: "archived"},
+		},
+	}); err != nil {
+		slog.Error("smeldr-social: RegisterFlow failed", "error", err)
+	}
+
 	app.Handle("GET /oauth/mastodon/callback", http.HandlerFunc(s.handleMastodonCallback))
 	if s.linkedin != nil {
 		app.Handle("GET /oauth/linkedin/callback", http.HandlerFunc(s.handleLinkedInCallback))

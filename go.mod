@@ -1,10 +1,10 @@
 module smeldr.dev/social
 
-go 1.26.3
+go 1.26.4
 
 require (
 	modernc.org/sqlite v1.50.1
-	smeldr.dev/core v1.26.0
+	smeldr.dev/core v1.44.3
 )
 
 require (

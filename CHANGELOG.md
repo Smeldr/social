@@ -1,5 +1,20 @@
 # smeldr.dev/social Changelog
 
+## [0.9.1] — 2026-06-30
+
+### Changed
+- `Social.Register` now calls `app.RegisterFlow` with the ScheduledPost delivery flow
+  before registering HTTP routes. Flow: draft → scheduled → queued → delivered/partial/failed.
+  Retry loop: partial and failed states can re-enter queued. Terminal states (delivered,
+  archived) and archived accept delivered/partial/failed for archiving. (T23 Step 9, A182)
+
+### Internal
+- `smeldr.dev/core` dependency bumped from v1.26.0 to v1.44.3 (adds state flow
+  infrastructure: `RegisterFlow`, `StateFlow`, `State`, `Transition`). (T23 Step 9)
+- `go` directive updated 1.26.3 → 1.26.4 (required by core v1.44.3).
+
+---
+
 ## [0.9.0] — 2026-06-11
 
 ### Changed
