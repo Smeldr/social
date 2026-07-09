@@ -1,5 +1,21 @@
 # smeldr.dev/social Changelog
 
+## [0.10.0] — 2026-07-09
+
+### Added
+- 5 REST endpoints for ScheduledPost management: `POST /social/posts`,
+  `GET /social/posts`, `GET /social/posts/{id}`, `PUT /social/posts/{id}`,
+  `DELETE /social/posts/{id}`. All endpoints require Bearer token validation
+  via `smeldr.VerifyBearerToken`. (A211)
+- `Social.tokens *smeldr.TokenStore` internal field added to social.go;
+  initialised in `New()` with `smeldr.NewTokenStore(db, string(cfg.Secret))`.
+
+### Internal
+- `post_http_test.go` added — 24 tests covering all 5 endpoints and error paths.
+- `export_test.go` updated — `PostHandlerForTest()` added for white-box test access.
+
+---
+
 ## [0.9.2] — 2026-06-30
 
 ### Changed

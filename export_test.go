@@ -7,6 +7,19 @@ import (
 	"smeldr.dev/core"
 )
 
+// PostHandlerForTest returns an http.Handler that routes the five REST
+// endpoints to their handlers. Used in post_http_test.go to test handlers
+// without a full smeldr.App.
+func (s *Social) PostHandlerForTest() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /social/posts", s.handlePostCreate)
+	mux.HandleFunc("GET /social/posts", s.handlePostList)
+	mux.HandleFunc("GET /social/posts/{id}", s.handlePostGet)
+	mux.HandleFunc("PUT /social/posts/{id}", s.handlePostUpdate)
+	mux.HandleFunc("DELETE /social/posts/{id}", s.handlePostDelete)
+	return mux
+}
+
 // Export internal functions for white-box testing.
 // This file is compiled into the package (not the test binary) so that
 // external test packages (package social_test) can call them.

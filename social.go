@@ -71,7 +71,8 @@ type Social struct {
 	linkedin     *linkedinClient
 	twitter      *twitterClient
 	sched        *scheduler
-	router       *Router // nil if AddRoutes was not called
+	router       *Router            // nil if AddRoutes was not called
+	tokens       *smeldr.TokenStore // for REST endpoint bearer auth
 }
 
 // New creates a Social instance backed by db. It panics if db is nil,
@@ -133,6 +134,7 @@ func New(db smeldr.DB, cfg Config) *Social {
 	}
 
 	s.sched = newScheduler(s)
+	s.tokens = smeldr.NewTokenStore(db, string(cfg.Secret))
 	return s
 }
 
@@ -141,9 +143,15 @@ func New(db smeldr.DB, cfg Config) *Social {
 //
 // Routes registered:
 //
-//	GET /oauth/mastodon/callback — OAuth 2.0 callback from Mastodon
-//	GET /oauth/linkedin/callback — OAuth 2.0 callback from LinkedIn (when configured)
-//	GET /oauth/x/callback        — OAuth 2.0 + PKCE callback from X (when configured)
+//	GET    /oauth/mastodon/callback — OAuth 2.0 callback from Mastodon
+//	GET    /oauth/linkedin/callback — OAuth 2.0 callback from LinkedIn (when configured)
+//	GET    /oauth/x/callback        — OAuth 2.0 + PKCE callback from X (when configured)
+//
+//	POST   /social/posts        — create a ScheduledPost (Bearer token required)
+//	GET    /social/posts        — list ScheduledPosts   (Bearer token required)
+//	GET    /social/posts/{id}   — get one ScheduledPost (Bearer token required)
+//	PUT    /social/posts/{id}   — update a ScheduledPost (Bearer token required)
+//	DELETE /social/posts/{id}   — delete a ScheduledPost (Bearer token required)
 //
 // Call [Social.Stop] in your shutdown handler to drain the scheduler.
 func (s *Social) Register(app *smeldr.App) {
@@ -180,6 +188,13 @@ func (s *Social) Register(app *smeldr.App) {
 		app.Handle("GET /oauth/linkedin/callback", http.HandlerFunc(s.handleLinkedInCallback))
 	}
 	app.Handle("GET /oauth/x/callback", http.HandlerFunc(s.handleXCallback))
+
+	app.Handle("POST /social/posts", http.HandlerFunc(s.handlePostCreate))
+	app.Handle("GET /social/posts", http.HandlerFunc(s.handlePostList))
+	app.Handle("GET /social/posts/{id}", http.HandlerFunc(s.handlePostGet))
+	app.Handle("PUT /social/posts/{id}", http.HandlerFunc(s.handlePostUpdate))
+	app.Handle("DELETE /social/posts/{id}", http.HandlerFunc(s.handlePostDelete))
+
 	s.sched.start()
 }
 
