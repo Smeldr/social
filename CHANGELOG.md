@@ -1,5 +1,12 @@
 # smeldr.dev/social Changelog
 
+## [0.10.1] — 2026-07-10
+
+### Fixed
+- `mcp.go` `MCPCreate`: the explicit `status` field documented in `MCPSchema` is now honoured on create. Previously, an explicit `status` value was silently ignored. The refactored logic mirrors `MCPUpdate`: `scheduled_at` is parsed first, then the explicit `status` overrides the default, then auto-promote fires only when `scheduled_at` is set and the post is still in draft. `status: "scheduled"` without `scheduled_at` is accepted (consistent with `MCPUpdate`). (T140)
+
+---
+
 ## [0.10.0] — 2026-07-09
 
 ### Added

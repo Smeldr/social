@@ -369,6 +369,149 @@ func TestPost_PlatformInvalidReturnsError(t *testing.T) {
 	}
 }
 
+// TestScheduledPost_MCPCreate_Status verifies that the explicit status field on
+// create is honoured, invalid values are rejected, and auto-promote still fires
+// when scheduled_at is set and the post remains in draft status.
+func TestScheduledPost_MCPCreate_Status(t *testing.T) {
+	db := openTestDB(t)
+	svc := social.New(db, social.Config{
+		Secret: []byte("test-secret-32-bytes-long-padded!"),
+	})
+	defer svc.Stop()
+	pm := svc.PostModule()
+	ctx := adminCtx()
+	future := time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339)
+
+	base := map[string]any{
+		"credential_id": "cred-1",
+		"body":          "test body",
+	}
+	merge := func(extra map[string]any) map[string]any {
+		m := make(map[string]any, len(base)+len(extra))
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+
+	t.Run("no status defaults to draft", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(nil))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		if got := res.(social.ScheduledPost).Status; got != social.PostStatusDraft {
+			t.Errorf("status = %q; want %q", got, social.PostStatusDraft)
+		}
+	})
+
+	t.Run("explicit draft", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "draft"}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		if got := res.(social.ScheduledPost).Status; got != social.PostStatusDraft {
+			t.Errorf("status = %q; want %q", got, social.PostStatusDraft)
+		}
+	})
+
+	t.Run("explicit scheduled without scheduled_at", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "scheduled"}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		p := res.(social.ScheduledPost)
+		if p.Status != social.PostStatusScheduled {
+			t.Errorf("status = %q; want %q", p.Status, social.PostStatusScheduled)
+		}
+		if p.ScheduledAt != nil {
+			t.Error("ScheduledAt should be nil when not provided")
+		}
+	})
+
+	t.Run("explicit queued", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "queued"}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		if got := res.(social.ScheduledPost).Status; got != social.PostStatusQueued {
+			t.Errorf("status = %q; want %q", got, social.PostStatusQueued)
+		}
+	})
+
+	t.Run("explicit archived", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "archived"}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		if got := res.(social.ScheduledPost).Status; got != social.PostStatusArchived {
+			t.Errorf("status = %q; want %q", got, social.PostStatusArchived)
+		}
+	})
+
+	t.Run("invalid status rejected", func(t *testing.T) {
+		_, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "published"}))
+		if err == nil {
+			t.Error("expected error for status=published on create")
+		}
+		_, err = pm.MCPCreate(ctx, merge(map[string]any{"status": "nonsense"}))
+		if err == nil {
+			t.Error("expected error for status=nonsense on create")
+		}
+	})
+
+	t.Run("scheduled_at only auto-promotes", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"scheduled_at": future}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		p := res.(social.ScheduledPost)
+		if p.Status != social.PostStatusScheduled {
+			t.Errorf("status = %q; want %q", p.Status, social.PostStatusScheduled)
+		}
+		if p.ScheduledAt == nil {
+			t.Error("ScheduledAt should be set")
+		}
+	})
+
+	t.Run("queued plus scheduled_at explicit wins", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "queued", "scheduled_at": future}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		p := res.(social.ScheduledPost)
+		if p.Status != social.PostStatusQueued {
+			t.Errorf("status = %q; want %q", p.Status, social.PostStatusQueued)
+		}
+		if p.ScheduledAt == nil {
+			t.Error("ScheduledAt should be set")
+		}
+	})
+
+	t.Run("draft plus scheduled_at auto-promotes", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "draft", "scheduled_at": future}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		p := res.(social.ScheduledPost)
+		if p.Status != social.PostStatusScheduled {
+			t.Errorf("status = %q; want scheduled (auto-promote)", p.Status)
+		}
+	})
+
+	t.Run("archived plus scheduled_at explicit wins", func(t *testing.T) {
+		res, err := pm.MCPCreate(ctx, merge(map[string]any{"status": "archived", "scheduled_at": future}))
+		if err != nil {
+			t.Fatalf("MCPCreate: %v", err)
+		}
+		if got := res.(social.ScheduledPost).Status; got != social.PostStatusArchived {
+			t.Errorf("status = %q; want %q", got, social.PostStatusArchived)
+		}
+	})
+}
+
 func TestMigration_ActorIDColumn(t *testing.T) {
 	// Simulate a v0.1.0 database: create the old schema without actor_id,
 	// then call CreateTables (which runs the migration) and verify the column exists.

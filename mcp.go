@@ -110,9 +110,9 @@ func (m *postModule) MCPGet(_ smeldr.Context, slug string) (any, error) {
 	return p, nil
 }
 
-// MCPCreate creates a new ScheduledPost with status=draft.
-// If scheduled_at is provided, status is automatically set to "scheduled".
-// The platform field selects the publishing target (default: "mastodon").
+// MCPCreate creates a new ScheduledPost. Status defaults to "draft". An explicit
+// status field overrides the default; scheduled_at auto-promotes a draft post to
+// "scheduled". The platform field selects the publishing target (default: "mastodon").
 func (m *postModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, error) {
 	credentialID, _ := fields["credential_id"].(string)
 	if credentialID == "" {
@@ -155,6 +155,19 @@ func (m *postModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, er
 		}
 		utc := t.UTC()
 		p.ScheduledAt = &utc
+	}
+
+	if v, ok := fields["status"].(string); ok {
+		switch PostStatus(v) {
+		case PostStatusDraft, PostStatusScheduled, PostStatusQueued, PostStatusArchived:
+			p.Status = PostStatus(v)
+		default:
+			return nil, smeldr.Err("status", "must be draft, scheduled, queued, or archived")
+		}
+	}
+
+	// Auto-promote to scheduled when scheduled_at is set and status is still draft.
+	if p.ScheduledAt != nil && p.Status == PostStatusDraft {
 		p.Status = PostStatusScheduled
 	}
 
