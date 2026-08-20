@@ -1,5 +1,12 @@
 # smeldr.dev/social Changelog
 
+## [0.10.2] — 2026-08-20
+
+### Changed
+- `configModule`, `credentialModule`, `scheduleModule`, and `postModule` (all four `smeldr.MCPModule` implementers in this repo) updated to `smeldr.dev/core`'s widened `MCPPublish`/`MCPSchedule`/`MCPArchive` interface (v1.76.0+, a trailing `reason string` parameter, A284, D53 breaking change). The three stub implementers remain one-line `ErrBadRequest`, no behaviour change. `postModule` (the real `ScheduledPost` lifecycle) accepts `reason` for interface compliance and does not persist it — this repo has no provenance/audit mechanism to record it against; an explicit doc comment on all three methods states this. Requires `smeldr.dev/core` v1.76.0+.
+
+---
+
 ## [0.10.1] — 2026-07-10
 
 ### Fixed

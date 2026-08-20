@@ -125,7 +125,7 @@ func TestScheduledPost_Lifecycle(t *testing.T) {
 
 	// MCPSchedule.
 	future := time.Now().UTC().Add(1 * time.Hour)
-	if err := pm.MCPSchedule(ctx, post.ID, future); err != nil {
+	if err := pm.MCPSchedule(ctx, post.ID, future, ""); err != nil {
 		t.Fatalf("MCPSchedule: %v", err)
 	}
 	updated, _ := pm.MCPGet(ctx, post.ID)
@@ -134,7 +134,7 @@ func TestScheduledPost_Lifecycle(t *testing.T) {
 	}
 
 	// MCPArchive.
-	if err := pm.MCPArchive(ctx, post.ID); err != nil {
+	if err := pm.MCPArchive(ctx, post.ID, ""); err != nil {
 		t.Fatalf("MCPArchive: %v", err)
 	}
 	archived, _ := pm.MCPGet(ctx, post.ID)
