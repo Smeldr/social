@@ -240,8 +240,13 @@ func (m *postModule) MCPUpdate(_ smeldr.Context, slug string, fields map[string]
 }
 
 // MCPPublish publishes the ScheduledPost immediately, bypassing the scheduler.
-// This is the "publish_now" operation.
-func (m *postModule) MCPPublish(ctx smeldr.Context, slug string) error {
+// This is the "publish_now" operation. reason is accepted for smeldr.MCPModule
+// interface compliance (smeldr.dev/core v1.76.0+, T237) and is not currently
+// persisted — smeldr/social has no provenance/audit mechanism to record it
+// against (verified during T237's own review: no Provenance/AuditStore
+// anywhere in this module). A future task adding one is this parameter's
+// natural extension point.
+func (m *postModule) MCPPublish(ctx smeldr.Context, slug, reason string) error {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return err
@@ -255,8 +260,9 @@ func (m *postModule) MCPPublish(ctx smeldr.Context, slug string) error {
 	return m.social.publishNow(context.Background(), p)
 }
 
-// MCPSchedule sets the ScheduledPost to publish at the given time.
-func (m *postModule) MCPSchedule(_ smeldr.Context, slug string, at time.Time) error {
+// MCPSchedule sets the ScheduledPost to publish at the given time. reason:
+// see [postModule.MCPPublish].
+func (m *postModule) MCPSchedule(_ smeldr.Context, slug string, at time.Time, reason string) error {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return err
@@ -270,8 +276,9 @@ func (m *postModule) MCPSchedule(_ smeldr.Context, slug string, at time.Time) er
 	return updatePost(m.social.db, p)
 }
 
-// MCPArchive transitions the ScheduledPost to archived.
-func (m *postModule) MCPArchive(_ smeldr.Context, slug string) error {
+// MCPArchive transitions the ScheduledPost to archived. reason: see
+// [postModule.MCPPublish].
+func (m *postModule) MCPArchive(_ smeldr.Context, slug, reason string) error {
 	p, err := getPost(m.social.db, slug)
 	if err != nil {
 		return err
@@ -431,17 +438,17 @@ func (m *credentialModule) MCPUpdate(_ smeldr.Context, _ string, _ map[string]an
 }
 
 // MCPPublish is not supported for credentials — they have no lifecycle.
-func (m *credentialModule) MCPPublish(_ smeldr.Context, _ string) error {
+func (m *credentialModule) MCPPublish(_ smeldr.Context, _, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
 // MCPSchedule is not supported for credentials.
-func (m *credentialModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time) error {
+func (m *credentialModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
 // MCPArchive is not supported for credentials.
-func (m *credentialModule) MCPArchive(_ smeldr.Context, _ string) error {
+func (m *credentialModule) MCPArchive(_ smeldr.Context, _, _ string) error {
 	return smeldr.ErrBadRequest
 }
 

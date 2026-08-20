@@ -157,17 +157,17 @@ func (m *configModule) MCPUpdate(_ smeldr.Context, _ string, _ map[string]any) (
 }
 
 // MCPPublish is not supported.
-func (m *configModule) MCPPublish(_ smeldr.Context, _ string) error {
+func (m *configModule) MCPPublish(_ smeldr.Context, _, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
 // MCPSchedule is not supported.
-func (m *configModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time) error {
+func (m *configModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
 // MCPArchive is not supported.
-func (m *configModule) MCPArchive(_ smeldr.Context, _ string) error {
+func (m *configModule) MCPArchive(_ smeldr.Context, _, _ string) error {
 	return smeldr.ErrBadRequest
 }
 

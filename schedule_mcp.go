@@ -153,17 +153,17 @@ func (m *scheduleModule) MCPUpdate(_ smeldr.Context, slug string, fields map[str
 }
 
 // MCPPublish is not supported for PublicationSchedule — it has no lifecycle.
-func (m *scheduleModule) MCPPublish(_ smeldr.Context, _ string) error {
+func (m *scheduleModule) MCPPublish(_ smeldr.Context, _, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
 // MCPSchedule is not supported for PublicationSchedule.
-func (m *scheduleModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time) error {
+func (m *scheduleModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
 // MCPArchive is not supported for PublicationSchedule.
-func (m *scheduleModule) MCPArchive(_ smeldr.Context, _ string) error {
+func (m *scheduleModule) MCPArchive(_ smeldr.Context, _, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
