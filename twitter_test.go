@@ -2,6 +2,7 @@ package social
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"mime"
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // — uploadXMedia ——————————————————————————————————————————————————————————————
@@ -458,3 +460,390 @@ func (c *slogCapture) Handle(_ context.Context, r slog.Record) error {
 }
 func (c *slogCapture) WithAttrs(_ []slog.Attr) slog.Handler { return c }
 func (c *slogCapture) WithGroup(_ string) slog.Handler      { return c }
+
+// — authURL ———————————————————————————————————————————————————————————————————
+
+func TestAuthURL(t *testing.T) {
+	c := newTwitterClient(xConfig{
+		ClientID:    "client-123",
+		RedirectURL: "https://example.com/oauth/x/callback",
+		Scopes:      []string{"tweet.read", "tweet.write"},
+	})
+
+	got := c.authURL("state-abc", "challenge-xyz")
+
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("authURL returned invalid URL: %v", err)
+	}
+	if base := u.Scheme + "://" + u.Host + u.Path; base != xAuthBase+"/i/oauth2/authorize" {
+		t.Errorf("base URL = %q, want %q", base, xAuthBase+"/i/oauth2/authorize")
+	}
+
+	q := u.Query()
+	wantParams := map[string]string{
+		"response_type":         "code",
+		"client_id":             "client-123",
+		"redirect_uri":          "https://example.com/oauth/x/callback",
+		"scope":                 "tweet.read tweet.write",
+		"state":                 "state-abc",
+		"code_challenge":        "challenge-xyz",
+		"code_challenge_method": "S256",
+	}
+	for k, want := range wantParams {
+		if got := q.Get(k); got != want {
+			t.Errorf("query param %q = %q, want %q", k, got, want)
+		}
+	}
+}
+
+// — exchangeCode ——————————————————————————————————————————————————————————————
+
+func TestExchangeCode(t *testing.T) {
+	t.Run("happy path returns token and uses Basic auth", func(t *testing.T) {
+		var gotUser, gotPass string
+		var gotOK bool
+		var gotForm url.Values
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotUser, gotPass, gotOK = r.BasicAuth()
+			_ = r.ParseForm()
+			gotForm = r.Form
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"access_token":"tok","refresh_token":"reftok","token_type":"bearer","expires_in":7200,"scope":"tweet.read"}`))
+		}))
+		defer srv.Close()
+
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec", RedirectURL: "https://example.com/cb"},
+			httpClient: &http.Client{Transport: &xAPIRedirectTransport{apiBase: srv.URL}},
+		}
+
+		got, err := tc.exchangeCode(context.Background(), "auth-code", "verifier-1")
+		if err != nil {
+			t.Fatalf("exchangeCode: %v", err)
+		}
+		if got.AccessToken != "tok" || got.RefreshToken != "reftok" {
+			t.Errorf("unexpected token response: %+v", got)
+		}
+		if !gotOK || gotUser != "cid" || gotPass != "csec" {
+			t.Errorf("expected Basic auth cid:csec, got ok=%v user=%q pass=%q", gotOK, gotUser, gotPass)
+		}
+		if gotForm.Get("grant_type") != "authorization_code" {
+			t.Errorf("grant_type = %q, want authorization_code", gotForm.Get("grant_type"))
+		}
+		if gotForm.Get("code") != "auth-code" {
+			t.Errorf("code = %q, want auth-code", gotForm.Get("code"))
+		}
+		if gotForm.Get("code_verifier") != "verifier-1" {
+			t.Errorf("code_verifier = %q, want verifier-1", gotForm.Get("code_verifier"))
+		}
+		if gotForm.Get("redirect_uri") != "https://example.com/cb" {
+			t.Errorf("redirect_uri = %q, want https://example.com/cb", gotForm.Get("redirect_uri"))
+		}
+	})
+
+	t.Run("Do error returns wrapped error", func(t *testing.T) {
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec"},
+			httpClient: &http.Client{Transport: errTransport{}},
+		}
+		_, err := tc.exchangeCode(context.Background(), "code", "verifier")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "X token exchange:") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("read error returns wrapped error", func(t *testing.T) {
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec"},
+			httpClient: &http.Client{Transport: errBodyTransport{statusCode: http.StatusOK}},
+		}
+		_, err := tc.exchangeCode(context.Background(), "code", "verifier")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "X token exchange read") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("non-200 returns error with body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"invalid_grant"}`))
+		}))
+		defer srv.Close()
+
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec"},
+			httpClient: &http.Client{Transport: &xAPIRedirectTransport{apiBase: srv.URL}},
+		}
+		_, err := tc.exchangeCode(context.Background(), "code", "verifier")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "HTTP 400") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unmarshal error returns wrapped error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`not json`))
+		}))
+		defer srv.Close()
+
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec"},
+			httpClient: &http.Client{Transport: &xAPIRedirectTransport{apiBase: srv.URL}},
+		}
+		_, err := tc.exchangeCode(context.Background(), "code", "verifier")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "X token exchange parse") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+// — refreshXToken (remaining error branches) —————————————————————————————————
+
+func TestRefreshXToken_Errors(t *testing.T) {
+	t.Run("Do error returns wrapped error", func(t *testing.T) {
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec"},
+			httpClient: &http.Client{Transport: errTransport{}},
+		}
+		_, err := tc.refreshXToken(context.Background(), "reftok")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "X token refresh:") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("read error returns wrapped error", func(t *testing.T) {
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec"},
+			httpClient: &http.Client{Transport: errBodyTransport{statusCode: http.StatusOK}},
+		}
+		_, err := tc.refreshXToken(context.Background(), "reftok")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "X token refresh read") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unmarshal error returns wrapped error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`not json`))
+		}))
+		defer srv.Close()
+
+		tc := &twitterClient{
+			cfg:        xConfig{ClientID: "cid", ClientSecret: "csec"},
+			httpClient: &http.Client{Transport: &xAPIRedirectTransport{apiBase: srv.URL}},
+		}
+		_, err := tc.refreshXToken(context.Background(), "reftok")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "X token refresh parse") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+// — publish (remaining error and MediaURL branches) ——————————————————————————
+
+func TestPublish_withMediaURL(t *testing.T) {
+	t.Run("success end-to-end attaches media_ids", func(t *testing.T) {
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write([]byte("fake-image-bytes"))
+		}))
+		defer origin.Close()
+
+		var uploadCalls atomic.Int32
+		upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			call := int(uploadCalls.Add(1)) - 1
+			w.Header().Set("Content-Type", "application/json")
+			switch call {
+			case 0: // INIT
+				w.WriteHeader(http.StatusCreated)
+				w.Write([]byte(`{"data":{"id":"media-1"}}`))
+			case 1: // APPEND
+				w.WriteHeader(http.StatusNoContent)
+			default: // FINALIZE
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"data":{"id":"media-1"}}`))
+			}
+		}))
+		defer upload.Close()
+
+		var gotMediaIDs []string
+		tweetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var payload xTweetPayload
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			if payload.Media != nil {
+				gotMediaIDs = payload.Media.MediaIDs
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"data":{"id":"tweet-1","text":"hi"}}`))
+		}))
+		defer tweetSrv.Close()
+
+		tc := &twitterClient{
+			httpClient: &http.Client{
+				Transport: combinedXTransport{apiBase: tweetSrv.URL, uploadURL: upload.URL},
+			},
+		}
+
+		id, err := tc.publish(context.Background(),
+			ScheduledPost{Body: "hi", MediaURL: origin.URL + "/img.jpg"},
+			PlatformCredential{accessToken: "tok"})
+		if err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		if id != "tweet-1" {
+			t.Errorf("id = %q, want tweet-1", id)
+		}
+		if len(gotMediaIDs) != 1 || gotMediaIDs[0] != "media-1" {
+			t.Errorf("media_ids = %v, want [media-1]", gotMediaIDs)
+		}
+	})
+
+	t.Run("upload failure is wrapped", func(t *testing.T) {
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write([]byte("fake-image-bytes"))
+		}))
+		defer origin.Close()
+
+		upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"forbidden"}`))
+		}))
+		defer upload.Close()
+
+		tc := &twitterClient{
+			httpClient: &http.Client{
+				Transport: combinedXTransport{apiBase: "https://unused.invalid", uploadURL: upload.URL},
+			},
+		}
+
+		_, err := tc.publish(context.Background(),
+			ScheduledPost{Body: "hi", MediaURL: origin.URL + "/img.jpg"},
+			PlatformCredential{accessToken: "tok"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "X media upload") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestPublish_tweetRequestDoError(t *testing.T) {
+	tc := &twitterClient{httpClient: &http.Client{Transport: errTransport{}}}
+	_, err := tc.publish(context.Background(), ScheduledPost{Body: "hi"}, PlatformCredential{accessToken: "tok"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "simulated network error") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestPublish_tweetResponseReadError(t *testing.T) {
+	tc := &twitterClient{httpClient: &http.Client{Transport: errBodyTransport{statusCode: http.StatusCreated}}}
+	_, err := tc.publish(context.Background(), ScheduledPost{Body: "hi"}, PlatformCredential{accessToken: "tok"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "X publish read") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestPublish_rateLimited(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "30")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	tc := &twitterClient{httpClient: &http.Client{Transport: &xAPIRedirectTransport{apiBase: srv.URL}}}
+	_, err := tc.publish(context.Background(), ScheduledPost{Body: "hi"}, PlatformCredential{accessToken: "tok"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	rle, ok := err.(*rateLimitError)
+	if !ok {
+		t.Fatalf("expected *rateLimitError, got %T: %v", err, err)
+	}
+	if rle.retryAfter != 30*time.Second {
+		t.Errorf("retryAfter = %v, want 30s", rle.retryAfter)
+	}
+}
+
+func TestPublish_tweetResponseUnmarshalError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`not json`))
+	}))
+	defer srv.Close()
+
+	tc := &twitterClient{httpClient: &http.Client{Transport: &xAPIRedirectTransport{apiBase: srv.URL}}}
+	_, err := tc.publish(context.Background(), ScheduledPost{Body: "hi"}, PlatformCredential{accessToken: "tok"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "X publish parse") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// — shared error-simulating transports ———————————————————————————————————————
+//
+// errTransport / errReadCloser / errBodyTransport are defined in
+// mastodon_test.go (same package) — reused here rather than redeclared.
+
+// combinedXTransport routes xMediaUploadURL requests to uploadURL and any
+// xAPIBase-prefixed request to apiBase, passing everything else (e.g. the
+// media origin fetch in uploadXMedia) through untouched. Used by tests that
+// exercise publish's MediaURL path end-to-end, where both the X API and the
+// X media upload endpoint must be redirected to local test servers.
+type combinedXTransport struct {
+	apiBase   string
+	uploadURL string
+}
+
+func (tr combinedXTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	switch {
+	case req.URL.String() == xMediaUploadURL:
+		target, _ := url.Parse(tr.uploadURL)
+		newReq := req.Clone(req.Context())
+		newReq.URL = target
+		return http.DefaultTransport.RoundTrip(newReq)
+	case strings.HasPrefix(req.URL.String(), xAPIBase):
+		target, _ := url.Parse(tr.apiBase + req.URL.RequestURI())
+		newReq := req.Clone(req.Context())
+		newReq.URL = target
+		newReq.Host = target.Host
+		return http.DefaultTransport.RoundTrip(newReq)
+	default:
+		return http.DefaultTransport.RoundTrip(req)
+	}
+}
