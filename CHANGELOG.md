@@ -1,5 +1,12 @@
 # smeldr.dev/social Changelog
 
+## [0.10.5] — 2026-09-19
+
+### Added
+- `codecov.yml` (target 34%, ~2 points below today's real 36.1% coverage) and a coverage-upload step in `ci.yml` (`go test -coverprofile=coverage.out ./...` + `codecov/codecov-action@v5`). Neither existed before. Raising coverage toward core's own 96% gate is real, separate, follow-up work — this release only adds the regression gate at today's real baseline.
+
+---
+
 ## [0.10.4] — 2026-09-19
 
 ### Fixed
