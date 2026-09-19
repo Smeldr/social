@@ -1,5 +1,12 @@
 # smeldr.dev/social Changelog
 
+## [0.10.3] — 2026-09-19
+
+### Changed
+- Moved the package doc comment out of `social.go` into a dedicated `doc.go` and rewrote the Quick start: the real `New()` path (`social.go:80-124`) loads platform config from the DB first via `create_platform_config`, falling back to `Config.Mastodon`/`Config.LinkedIn` only with an explicit `DEPRECATED` log line — the old comment showed only the deprecated path. Added the X (Twitter) platform and the slot-queue `PublicationSchedule` model, neither mentioned before. Docs-only, no behaviour change.
+
+---
+
 ## [0.10.2] — 2026-08-20
 
 ### Changed
