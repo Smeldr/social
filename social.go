@@ -1,38 +1,3 @@
-// Package social provides platform publishing for Smeldr applications.
-// It supports scheduling and publishing content to Mastodon and LinkedIn
-// via OAuth 2.0.
-//
-// # Quick start
-//
-//	import "smeldr.dev/social"
-//
-//	social := social.New(db, social.Config{
-//	    Secret: cfg.Secret,
-//	    Mastodon: social.MastodonConfig{
-//	        ClientID:     os.Getenv("MASTODON_CLIENT_ID"),
-//	        ClientSecret: os.Getenv("MASTODON_CLIENT_SECRET"),
-//	        InstanceURL:  os.Getenv("MASTODON_INSTANCE_URL"),
-//	        RedirectURL:  cfg.BaseURL + "/oauth/mastodon/callback",
-//	    },
-//	    LinkedIn: social.LinkedInConfig{
-//	        ClientID:     os.Getenv("LINKEDIN_CLIENT_ID"),
-//	        ClientSecret: os.Getenv("LINKEDIN_CLIENT_SECRET"),
-//	        RedirectURL:  cfg.BaseURL + "/oauth/linkedin/callback",
-//	    },
-//	})
-//	social.Register(app)
-//	defer social.Stop()
-//
-//	// Wire MCP tools.
-//	mcpSrv := mcp.New(app,
-//	    mcp.WithModule(social.PostModule()),
-//	    mcp.WithModule(social.CredentialModule()),
-//	)
-//	// Layer 1 — wire agent routing (optional).
-//	// Fires on AfterPublish for "Post" content type.
-//	social.AddRoutes(app,
-//	    social.OnPublish("Post", "https://agent.example.com/social"),
-//	)
 package social
 
 import (
