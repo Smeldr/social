@@ -136,3 +136,138 @@ func TestRouteJobStore_MarkDelivered(t *testing.T) {
 		t.Errorf("expected 0 due jobs after delivery, got %d", len(jobs))
 	}
 }
+
+// TestRouter_Handle_EnqueuesOnMatch exercises the closure returned by
+// Router.handle directly: it must enqueue a job when (signal, ContentType)
+// matches a registered route, and must not enqueue anything for a
+// non-matching ContentType.
+func TestRouter_Handle_EnqueuesOnMatch(t *testing.T) {
+	db := openRouterTestDB(t)
+	route := social.Route{
+		Signal:      smeldr.AfterPublish,
+		ContentType: "Post",
+		AgentURL:    "https://agent.example.com/hook",
+	}
+	cb := social.HandleForTest(db, route)
+
+	ev := smeldr.SignalEvent{Type: "Post", Slug: "handle-test", Timestamp: time.Now().UTC()}
+	if err := cb(context.Background(), ev); err != nil {
+		t.Fatalf("handle callback returned error: %v", err)
+	}
+
+	store := social.NewRouteJobStoreForTest(db)
+	jobs, err := store.DueJobsForTest(context.Background())
+	if err != nil {
+		t.Fatalf("DueJobsForTest: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 enqueued job after a matching signal, got %d", len(jobs))
+	}
+	if jobs[0].ContentType != "Post" {
+		t.Errorf("ContentType = %q; want Post", jobs[0].ContentType)
+	}
+	if jobs[0].AgentURL != route.AgentURL {
+		t.Errorf("AgentURL = %q; want %q", jobs[0].AgentURL, route.AgentURL)
+	}
+}
+
+// TestRouter_Handle_NoMatchDoesNotEnqueue confirms the non-matching
+// ContentType branch of the handle closure is a true no-op.
+func TestRouter_Handle_NoMatchDoesNotEnqueue(t *testing.T) {
+	db := openRouterTestDB(t)
+	route := social.Route{
+		Signal:      smeldr.AfterPublish,
+		ContentType: "Post",
+		AgentURL:    "https://agent.example.com/hook",
+	}
+	cb := social.HandleForTest(db, route)
+
+	ev := smeldr.SignalEvent{Type: "Story", Slug: "no-match", Timestamp: time.Now().UTC()}
+	if err := cb(context.Background(), ev); err != nil {
+		t.Fatalf("handle callback returned error: %v", err)
+	}
+
+	store := social.NewRouteJobStoreForTest(db)
+	jobs, err := store.DueJobsForTest(context.Background())
+	if err != nil {
+		t.Fatalf("DueJobsForTest: %v", err)
+	}
+	if len(jobs) != 0 {
+		t.Errorf("expected 0 enqueued jobs for a non-matching ContentType, got %d", len(jobs))
+	}
+}
+
+// smeldrTestApp builds a minimal, real *smeldr.App suitable for exercising
+// AddRoutes' registration path (OnSignal wiring, worker startup) without a
+// running HTTP server.
+func smeldrTestApp(t *testing.T) *smeldr.App {
+	t.Helper()
+	return smeldr.New(smeldr.Config{
+		BaseURL: "https://example.com",
+		Secret:  []byte("test-secret-32-bytes-long-padded!"),
+	})
+}
+
+// TestAddRoutes_ZeroRoutesIsActuallyNoop calls AddRoutes itself (not just
+// Stop) with zero routes and confirms it neither panics nor starts a worker
+// that would make Stop hang.
+func TestAddRoutes_ZeroRoutesIsActuallyNoop(t *testing.T) {
+	db := openRouterTestDB(t)
+	app := smeldrTestApp(t)
+	svc := social.New(db, social.Config{Secret: []byte("test-secret-32-bytes-long-padded!")})
+
+	svc.AddRoutes(app) // zero routes — must be a no-op
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		svc.Stop()
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Error("Stop() hung after AddRoutes() with zero routes")
+	}
+}
+
+// TestAddRoutes_PanicsOnInvalidRoute calls AddRoutes itself (not just
+// validateRoute) with a structurally invalid route and confirms the panic
+// happens before any worker goroutine is started.
+func TestAddRoutes_PanicsOnInvalidRoute(t *testing.T) {
+	db := openRouterTestDB(t)
+	app := smeldrTestApp(t)
+	svc := social.New(db, social.Config{Secret: []byte("test-secret-32-bytes-long-padded!")})
+
+	defer expectPanic(t, "AddRoutes should panic on a structurally invalid route")
+	svc.AddRoutes(app, social.Route{
+		Signal:      smeldr.AfterPublish,
+		ContentType: "", // invalid — see validateRoute
+		AgentURL:    "https://agent.example.com/hook",
+	})
+}
+
+// TestAddRoutes_ValidRouteRegistersAndStops confirms AddRoutes' happy path:
+// a valid route registers without panicking and Stop() still shuts down
+// cleanly (the worker goroutine it started can be stopped).
+func TestAddRoutes_ValidRouteRegistersAndStops(t *testing.T) {
+	db := openRouterTestDB(t)
+	app := smeldrTestApp(t)
+	svc := social.New(db, social.Config{Secret: []byte("test-secret-32-bytes-long-padded!")})
+
+	svc.AddRoutes(app, social.Route{
+		Signal:      smeldr.AfterPublish,
+		ContentType: "Post",
+		AgentURL:    "https://agent.example.com/hook",
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		svc.Stop()
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Error("Stop() hung after AddRoutes() with a valid route")
+	}
+}
