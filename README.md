@@ -192,6 +192,13 @@ DELETE /social/posts/{slug}
 
 Bearer token required on all endpoints.
 
+`GET /social/posts` accepts an optional `?status=` query parameter
+(`draft`, `scheduled`, `published`, `failed`, `archived`, or `queued`) to
+filter results to a single status. A `scheduled` or `queued` filter
+returns results ordered soonest-first (real `scheduled_at` ascending,
+then queued posts in their own FIFO publish order); any other filter, or
+no filter, returns results newest-created-first.
+
 ---
 
 ## Agent routing (Layer 1)

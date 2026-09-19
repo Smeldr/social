@@ -127,7 +127,29 @@ func getPost(db smeldr.DB, id string) (ScheduledPost, error) {
 	return p, nil
 }
 
-// listPosts returns all ScheduledPost rows, ordered by created_at DESC.
+// orderClauseForStatuses returns listPosts's own ORDER BY clause. When
+// every requested status is forward-looking (scheduled or queued),
+// results are ordered soonest-first: real scheduled_at values ascending,
+// then NULL scheduled_at (queued, no slot fired yet) after them in their
+// own FIFO created_at order — matching the slot-queue's own real publish
+// order, not colliding with real scheduled_at values via SQLite's
+// NULL-sorts-first default. Any other status (or no filter) keeps the
+// original created_at descending default — newest-first is still right
+// for draft/published/failed/archived or an unfiltered listing.
+func orderClauseForStatuses(statuses []PostStatus) string {
+	for _, s := range statuses {
+		if s != PostStatusScheduled && s != PostStatusQueued {
+			return " ORDER BY created_at DESC"
+		}
+	}
+	if len(statuses) == 0 {
+		return " ORDER BY created_at DESC"
+	}
+	return " ORDER BY scheduled_at IS NULL, scheduled_at ASC, created_at ASC"
+}
+
+// listPosts returns all ScheduledPost rows. Ordering depends on which
+// statuses are requested — see [orderClauseForStatuses].
 // If statuses is non-empty, only rows with a matching status are returned.
 func listPosts(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 	query := `
@@ -146,7 +168,7 @@ func listPosts(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 		}
 		query += ")"
 	}
-	query += " ORDER BY created_at DESC"
+	query += orderClauseForStatuses(statuses)
 
 	rows, err := db.QueryContext(context.Background(), query, args...)
 	if err != nil {

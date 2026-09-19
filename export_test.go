@@ -38,6 +38,21 @@ func ValidateRouteForTest(r Route) {
 	validateRoute(r)
 }
 
+// OrderClauseForStatusesForTest calls orderClauseForStatuses.
+func OrderClauseForStatusesForTest(statuses []PostStatus) string {
+	return orderClauseForStatuses(statuses)
+}
+
+// InsertPostForTest calls insertPost.
+func InsertPostForTest(db smeldr.DB, p ScheduledPost) error {
+	return insertPost(db, p)
+}
+
+// ListPostsForTest calls listPosts.
+func ListPostsForTest(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
+	return listPosts(db, statuses...)
+}
+
 // RouteJobStoreForTest wraps routeJobStore for test access.
 type RouteJobStoreForTest struct {
 	inner *routeJobStore

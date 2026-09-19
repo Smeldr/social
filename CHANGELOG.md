@@ -1,5 +1,15 @@
 # smeldr.dev/social Changelog
 
+## [0.10.4] — 2026-09-19
+
+### Fixed
+- `listPosts` hardcoded `ORDER BY created_at DESC` regardless of which statuses were requested. A `?status=scheduled` or `?status=queued` listing ("what's coming up next") now sorts soonest-first: real `scheduled_at` ascending, then queued posts (no `scheduled_at` — they wait for a `PublicationSchedule` slot) in their own FIFO `created_at` order after real scheduled values, rather than colliding with them via SQLite's NULL-sorts-first default. Any other status filter, or no filter, keeps the original `created_at` descending default.
+
+### Changed
+- `README.md`'s REST API section now documents the already-working `?status=` query parameter on `GET /social/posts` — it was never mentioned despite working since the endpoint shipped.
+
+---
+
 ## [0.10.3] — 2026-09-19
 
 ### Changed
