@@ -74,7 +74,7 @@ func TestLinkedinExchangeCode(t *testing.T) {
 		defer srv.Close()
 
 		lc := newTestLinkedinClient(srv)
-		//nolint:staticcheck // intentionally passing nil context to force http.NewRequestWithContext to fail
+		//lint:ignore SA1012 a nil context makes http.NewRequestWithContext fail, which is the error path under test
 		_, err := lc.exchangeCode(nil, "auth-code")
 		if err == nil {
 			t.Fatal("expected error, got nil")
@@ -167,7 +167,7 @@ func TestLinkedinFetchPersonURN(t *testing.T) {
 		defer srv.Close()
 
 		lc := newTestLinkedinClient(srv)
-		//nolint:staticcheck // intentionally passing nil context to force http.NewRequestWithContext to fail
+		//lint:ignore SA1012 a nil context makes http.NewRequestWithContext fail, which is the error path under test
 		_, err := lc.fetchPersonURN(nil, "tok-abc")
 		if err == nil {
 			t.Fatal("expected error, got nil")
@@ -275,7 +275,7 @@ func TestLinkedinPublish(t *testing.T) {
 
 		lc := newTestLinkedinClient(srv)
 		cred := PlatformCredential{ActorID: "urn:li:person:123", accessToken: "tok"}
-		//nolint:staticcheck // intentionally passing nil context to force http.NewRequestWithContext to fail
+		//lint:ignore SA1012 a nil context makes http.NewRequestWithContext fail, which is the error path under test
 		_, err := lc.publish(nil, ScheduledPost{Body: "hello"}, cred)
 		if err == nil {
 			t.Fatal("expected error, got nil")

@@ -38,9 +38,8 @@ func TestValidateAgentURL_RejectsDotLocal(t *testing.T) {
 
 func TestAddRoutes_PanicsOnLowercaseContentType(t *testing.T) {
 	defer expectPanic(t, "lowercase contentType should panic")
-	social.OnPublish("post", "https://agent.example.com/hook")
-	// validateRoute is called inside AddRoutes, not OnPublish.
-	// Test the validation directly via an exported helper.
+	// validateRoute runs inside AddRoutes, not OnPublish, so the test calls it
+	// directly through the exported helper.
 	social.ValidateRouteForTest(social.Route{
 		Signal:      "after_publish",
 		ContentType: "post",

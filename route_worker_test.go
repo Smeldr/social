@@ -16,8 +16,7 @@ import (
 func TestRouteWorker_Delivers2xx(t *testing.T) {
 	received := make(chan []byte, 1)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var buf []byte
-		buf = make([]byte, r.ContentLength)
+		buf := make([]byte, r.ContentLength)
 		r.Body.Read(buf)
 		received <- buf
 		w.WriteHeader(http.StatusOK)

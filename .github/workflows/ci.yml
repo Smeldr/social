@@ -43,6 +43,12 @@ jobs:
           fi
           echo "All files gofmt'd"
 
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+
+      - name: Run staticcheck
+        run: staticcheck ./...
+
   postgres:
     name: Postgres integration
     runs-on: ubuntu-latest

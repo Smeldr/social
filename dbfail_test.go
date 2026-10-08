@@ -50,30 +50,6 @@ func (d *nthExecFailDB) ExecContext(ctx context.Context, q string, args ...any) 
 	return d.DB.ExecContext(ctx, q, args...)
 }
 
-// nthQueryFailDB wraps a real smeldr.DB and fails the Nth QueryContext call.
-// ExecContext and QueryRowContext always delegate to the real DB.
-type nthQueryFailDB struct {
-	DB   smeldr.DB
-	n    int
-	fail int // 1-indexed
-}
-
-func (d *nthQueryFailDB) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
-	return d.DB.ExecContext(ctx, q, args...)
-}
-
-func (d *nthQueryFailDB) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
-	d.n++
-	if d.n == d.fail {
-		return openFailingConn().QueryContext(ctx, "SELECT 1 FROM no_table_nthfail_xyz")
-	}
-	return d.DB.QueryContext(ctx, q, args...)
-}
-
-func (d *nthQueryFailDB) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
-	return d.DB.QueryRowContext(ctx, q, args...)
-}
-
 // nthQueryRowFailDB wraps a real smeldr.DB and fails the Nth QueryRowContext
 // call. ExecContext and QueryContext always delegate to the real DB.
 type nthQueryRowFailDB struct {
