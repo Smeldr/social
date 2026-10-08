@@ -3,7 +3,6 @@ package social
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"smeldr.dev/core"
 )
@@ -28,9 +27,9 @@ func CreateTables(db smeldr.DB) error {
 			actor_id      TEXT NOT NULL DEFAULT '',
 			access_token  TEXT NOT NULL,
 			refresh_token TEXT NOT NULL DEFAULT '',
-			expires_at    DATETIME,
-			created_at    DATETIME NOT NULL,
-			updated_at    DATETIME NOT NULL
+			expires_at    TIMESTAMP,
+			created_at    TIMESTAMP NOT NULL,
+			updated_at    TIMESTAMP NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS smeldr_social_posts (
 			id               TEXT PRIMARY KEY,
@@ -39,17 +38,17 @@ func CreateTables(db smeldr.DB) error {
 			body             TEXT NOT NULL,
 			media_url        TEXT NOT NULL DEFAULT '',
 			alt_text         TEXT NOT NULL DEFAULT '',
-			scheduled_at     DATETIME,
+			scheduled_at     TIMESTAMP,
 			status           TEXT NOT NULL DEFAULT 'draft',
 			platform_post_id TEXT NOT NULL DEFAULT '',
 			error_msg        TEXT NOT NULL DEFAULT '',
-			created_at       DATETIME NOT NULL,
-			updated_at       DATETIME NOT NULL
+			created_at       TIMESTAMP NOT NULL,
+			updated_at       TIMESTAMP NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS smeldr_social_oauth_states (
 			state      TEXT PRIMARY KEY,
 			platform   TEXT NOT NULL,
-			created_at DATETIME NOT NULL
+			created_at TIMESTAMP NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS smeldr_social_delivery_log (
 			id           TEXT PRIMARY KEY,
@@ -57,7 +56,7 @@ func CreateTables(db smeldr.DB) error {
 			attempt      INTEGER NOT NULL,
 			status_code  INTEGER NOT NULL DEFAULT 0,
 			error        TEXT NOT NULL DEFAULT '',
-			attempted_at DATETIME NOT NULL
+			attempted_at TIMESTAMP NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_smeldr_social_posts_status_scheduled
 			ON smeldr_social_posts(status, scheduled_at)`,
@@ -69,9 +68,9 @@ func CreateTables(db smeldr.DB) error {
 			payload      TEXT NOT NULL,
 			status       TEXT NOT NULL DEFAULT 'pending',
 			attempts     INTEGER NOT NULL DEFAULT 0,
-			next_attempt DATETIME,
+			next_attempt TIMESTAMP,
 			last_error   TEXT NOT NULL DEFAULT '',
-			created_at   DATETIME NOT NULL
+			created_at   TIMESTAMP NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_smeldr_social_route_jobs_status
 			ON smeldr_social_route_jobs(status, next_attempt)`,
@@ -81,23 +80,23 @@ func CreateTables(db smeldr.DB) error {
 			attempt      INTEGER NOT NULL,
 			status_code  INTEGER NOT NULL DEFAULT 0,
 			error        TEXT NOT NULL DEFAULT '',
-			attempted_at DATETIME NOT NULL
+			attempted_at TIMESTAMP NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS smeldr_social_publication_schedules (
 			id            TEXT PRIMARY KEY,
 			credential_id TEXT NOT NULL UNIQUE,
 			slots         TEXT NOT NULL DEFAULT '[]',
 			status        TEXT NOT NULL DEFAULT 'active',
-			last_tick_at  DATETIME,
-			created_at    DATETIME NOT NULL,
-			updated_at    DATETIME NOT NULL
+			last_tick_at  TIMESTAMP,
+			created_at    TIMESTAMP NOT NULL,
+			updated_at    TIMESTAMP NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_smeldr_social_pub_schedules_status
 			ON smeldr_social_publication_schedules(status)`,
 		`CREATE TABLE IF NOT EXISTS smeldr_social_platform_config (
 			platform   TEXT PRIMARY KEY,
 			config     TEXT NOT NULL,
-			updated_at DATETIME NOT NULL
+			updated_at TIMESTAMP NOT NULL
 		)`,
 	}
 
@@ -108,21 +107,13 @@ func CreateTables(db smeldr.DB) error {
 		}
 	}
 
-	// Idempotent migration: add actor_id column for databases created before v0.2.0.
-	// On a fresh database the column already exists (declared above); SQLite returns
-	// "duplicate column name" which we swallow. On an existing v0.1.0 database the
-	// ALTER TABLE adds the column.
-	_, err := db.ExecContext(ctx,
-		`ALTER TABLE smeldr_social_credentials ADD COLUMN actor_id TEXT NOT NULL DEFAULT ''`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+	// Columns added after the first releases, for databases that predate them:
+	// actor_id (v0.2.0) and code_verifier (v0.5.0, the PKCE verifier of the X
+	// OAuth 2.0 flow). EnsureColumn probes first and works on SQLite and Postgres.
+	if err := smeldr.EnsureColumn(ctx, db, "smeldr_social_credentials", "actor_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return fmt.Errorf("social: migrate actor_id: %w", err)
 	}
-
-	// Idempotent migration: add code_verifier column for databases created before v0.5.0.
-	// Stores the PKCE code_verifier for the X OAuth 2.0 flow; empty string for other platforms.
-	_, err = db.ExecContext(ctx,
-		`ALTER TABLE smeldr_social_oauth_states ADD COLUMN code_verifier TEXT NOT NULL DEFAULT ''`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+	if err := smeldr.EnsureColumn(ctx, db, "smeldr_social_oauth_states", "code_verifier", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return fmt.Errorf("social: migrate code_verifier: %w", err)
 	}
 

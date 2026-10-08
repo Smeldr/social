@@ -51,7 +51,7 @@ func (s *routeJobStore) enqueue(route Route, sig smeldr.LifecycleEvent, ev smeld
 	_, err = s.db.ExecContext(context.Background(),
 		`INSERT INTO smeldr_social_route_jobs
 		 (id, signal, content_type, agent_url, payload, status, attempts, next_attempt, last_error, created_at)
-		 VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, '', ?)`,
+		 VALUES ($1, $2, $3, $4, $5, 'pending', 0, $6, '', $7)`,
 		smeldr.NewID(),
 		string(sig),
 		route.ContentType,
@@ -71,7 +71,7 @@ func (s *routeJobStore) dueJobs(ctx context.Context) ([]routeJob, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, signal, content_type, agent_url, payload, status, attempts, next_attempt, last_error, created_at
 		 FROM smeldr_social_route_jobs
-		 WHERE status = 'pending' AND (next_attempt IS NULL OR next_attempt <= ?)
+		 WHERE status = 'pending' AND (next_attempt IS NULL OR next_attempt <= $1)
 		 ORDER BY next_attempt ASC
 		 LIMIT 50`,
 		time.Now().UTC(),
@@ -96,21 +96,21 @@ func (s *routeJobStore) dueJobs(ctx context.Context) ([]routeJob, error) {
 // markDelivered marks a job as successfully delivered.
 func (s *routeJobStore) markDelivered(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE smeldr_social_route_jobs SET status = 'delivered', last_error = '' WHERE id = ?`, id)
+		`UPDATE smeldr_social_route_jobs SET status = 'delivered', last_error = '' WHERE id = $1`, id)
 	return err
 }
 
 // markFailed marks a job as terminally failed.
 func (s *routeJobStore) markFailed(ctx context.Context, id string, msg string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE smeldr_social_route_jobs SET status = 'failed', last_error = ? WHERE id = ?`, msg, id)
+		`UPDATE smeldr_social_route_jobs SET status = 'failed', last_error = $1 WHERE id = $2`, msg, id)
 	return err
 }
 
 // scheduleRetry increments attempts and sets next_attempt for the next retry.
 func (s *routeJobStore) scheduleRetry(ctx context.Context, id string, attempts int, nextAt time.Time, errMsg string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE smeldr_social_route_jobs SET attempts = ?, next_attempt = ?, last_error = ? WHERE id = ?`,
+		`UPDATE smeldr_social_route_jobs SET attempts = $1, next_attempt = $2, last_error = $3 WHERE id = $4`,
 		attempts, nextAt, errMsg, id)
 	return err
 }
@@ -119,7 +119,7 @@ func (s *routeJobStore) scheduleRetry(ctx context.Context, id string, attempts i
 func (s *routeJobStore) logAttempt(ctx context.Context, jobID string, attempt, statusCode int, errMsg string) {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO smeldr_social_route_log (id, job_id, attempt, status_code, error, attempted_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		smeldr.NewID(), jobID, attempt, statusCode, errMsg, time.Now().UTC(),
 	)
 	if err != nil {

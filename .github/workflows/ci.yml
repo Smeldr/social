@@ -42,3 +42,34 @@ jobs:
             exit 1
           fi
           echo "All files gofmt'd"
+
+  postgres:
+    name: Postgres integration
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: forge
+          POSTGRES_PASSWORD: forge
+          POSTGRES_DB: forgetest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U forge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run the Postgres integration tests
+        env:
+          DATABASE_URL: postgres://forge:forge@localhost:5432/forgetest
+        run: go test -v -tags integration ./...

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"smeldr.dev/core"
@@ -56,7 +57,7 @@ func insertPost(db smeldr.DB, p ScheduledPost) error {
 		INSERT INTO smeldr_social_posts
 			(id, platform, credential_id, body, media_url, alt_text,
 			 scheduled_at, status, platform_post_id, error_msg, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		p.ID, p.Platform, p.CredentialID, p.Body, p.MediaURL, p.AltText,
 		nullTime(p.ScheduledAt), string(p.Status), p.PlatformPostID, p.ErrorMsg,
 		p.CreatedAt, p.UpdatedAt,
@@ -68,9 +69,9 @@ func insertPost(db smeldr.DB, p ScheduledPost) error {
 func updatePost(db smeldr.DB, p ScheduledPost) error {
 	_, err := db.ExecContext(context.Background(), `
 		UPDATE smeldr_social_posts
-		SET body=?, media_url=?, alt_text=?, scheduled_at=?, status=?,
-		    platform_post_id=?, error_msg=?, updated_at=?
-		WHERE id=?`,
+		SET body=$1, media_url=$2, alt_text=$3, scheduled_at=$4, status=$5,
+		    platform_post_id=$6, error_msg=$7, updated_at=$8
+		WHERE id=$9`,
 		p.Body, p.MediaURL, p.AltText,
 		nullTime(p.ScheduledAt), string(p.Status),
 		p.PlatformPostID, p.ErrorMsg, time.Now().UTC(), p.ID,
@@ -82,8 +83,8 @@ func updatePost(db smeldr.DB, p ScheduledPost) error {
 func markPostPublished(db smeldr.DB, id, platformPostID string) error {
 	_, err := db.ExecContext(context.Background(), `
 		UPDATE smeldr_social_posts
-		SET status='published', platform_post_id=?, error_msg='', updated_at=?
-		WHERE id=?`,
+		SET status='published', platform_post_id=$1, error_msg='', updated_at=$2
+		WHERE id=$3`,
 		platformPostID, time.Now().UTC(), id,
 	)
 	return err
@@ -93,8 +94,8 @@ func markPostPublished(db smeldr.DB, id, platformPostID string) error {
 func markPostFailed(db smeldr.DB, id, errMsg string) error {
 	_, err := db.ExecContext(context.Background(), `
 		UPDATE smeldr_social_posts
-		SET status='failed', error_msg=?, updated_at=?
-		WHERE id=?`,
+		SET status='failed', error_msg=$1, updated_at=$2
+		WHERE id=$3`,
 		errMsg, time.Now().UTC(), id,
 	)
 	return err
@@ -108,7 +109,7 @@ func getPost(db smeldr.DB, id string) (ScheduledPost, error) {
 	err := db.QueryRowContext(context.Background(), `
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
-		FROM smeldr_social_posts WHERE id=?`, id,
+		FROM smeldr_social_posts WHERE id=$1`, id,
 	).Scan(
 		&p.ID, &p.Platform, &p.CredentialID, &p.Body, &p.MediaURL, &p.AltText,
 		&scheduledAt, &p.Status, &p.PlatformPostID, &p.ErrorMsg,
@@ -163,7 +164,7 @@ func listPosts(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 			if i > 0 {
 				query += ","
 			}
-			query += "?"
+			query += fmt.Sprintf("$%d", i+1)
 			args = append(args, string(s))
 		}
 		query += ")"
@@ -196,19 +197,50 @@ func listPosts(db smeldr.DB, statuses ...PostStatus) ([]ScheduledPost, error) {
 	return out, rows.Err()
 }
 
-// deletePost permanently removes the post with the given id.
-// Returns smeldr.ErrNotFound when no row exists.
+// deletePost permanently removes the post with the given id and its delivery
+// log, in one transaction when db supports it: the log rows reference the post,
+// and Postgres enforces that reference. Returns smeldr.ErrNotFound when no
+// post row exists.
 func deletePost(db smeldr.DB, id string) error {
-	res, err := db.ExecContext(context.Background(),
-		`DELETE FROM smeldr_social_posts WHERE id=?`, id)
+	return inTx(context.Background(), db, func(x smeldr.DB) error {
+		if _, err := x.ExecContext(context.Background(),
+			`DELETE FROM smeldr_social_delivery_log WHERE post_id=$1`, id); err != nil {
+			return err
+		}
+		res, err := x.ExecContext(context.Background(),
+			`DELETE FROM smeldr_social_posts WHERE id=$1`, id)
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return smeldr.ErrNotFound
+		}
+		return nil
+	})
+}
+
+// txBeginner is the part of *sql.DB inTx needs.
+type txBeginner interface {
+	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+}
+
+// inTx runs fn in one transaction when db can begin one, and on db itself
+// otherwise. An error from fn rolls the transaction back and is returned.
+func inTx(ctx context.Context, db smeldr.DB, fn func(smeldr.DB) error) error {
+	b, ok := db.(txBeginner)
+	if !ok {
+		return fn(db)
+	}
+	tx, err := b.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("social: begin: %w", err)
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return smeldr.ErrNotFound
-	}
-	return nil
+	return tx.Commit()
 }
 
 // duePosts returns all scheduled posts whose scheduled_at is in the past.
@@ -218,7 +250,7 @@ func duePosts(db smeldr.DB) ([]ScheduledPost, error) {
 		SELECT id, platform, credential_id, body, media_url, alt_text,
 		       scheduled_at, status, platform_post_id, error_msg, created_at, updated_at
 		FROM smeldr_social_posts
-		WHERE status='scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?
+		WHERE status='scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= $1
 		ORDER BY scheduled_at ASC`,
 		time.Now().UTC(),
 	)
@@ -271,7 +303,7 @@ func logDeliveryAttempt(db smeldr.DB, postID string, attempt, statusCode int, er
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO smeldr_social_delivery_log
 			(id, post_id, attempt, status_code, error, attempted_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5, $6)`,
 		smeldr.NewID(), postID, attempt, statusCode, errMsg, time.Now().UTC(),
 	)
 	return err
@@ -281,7 +313,7 @@ func logDeliveryAttempt(db smeldr.DB, postID string, attempt, statusCode int, er
 func deliveryAttemptCount(db smeldr.DB, postID string) (int, error) {
 	var n int
 	err := db.QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM smeldr_social_delivery_log WHERE post_id=?`, postID,
+		`SELECT COUNT(*) FROM smeldr_social_delivery_log WHERE post_id=$1`, postID,
 	).Scan(&n)
 	return n, err
 }

@@ -113,7 +113,7 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 	// Check for existing row.
 	var existingID string
 	err = cs.db.QueryRowContext(context.Background(),
-		`SELECT id FROM smeldr_social_credentials WHERE platform=? AND instance_url=?`,
+		`SELECT id FROM smeldr_social_credentials WHERE platform=$1 AND instance_url=$2`,
 		platform, instanceURL,
 	).Scan(&existingID)
 
@@ -125,8 +125,8 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 		// Update existing credential.
 		_, err = cs.db.ExecContext(context.Background(), `
 			UPDATE smeldr_social_credentials
-			SET name=?, actor_id=?, access_token=?, refresh_token=?, expires_at=?, updated_at=?
-			WHERE id=?`,
+			SET name=$1, actor_id=$2, access_token=$3, refresh_token=$4, expires_at=$5, updated_at=$6
+			WHERE id=$7`,
 			name, actorID, encAccess, encRefresh, nullTime(expiresAt), now, existingID,
 		)
 		return existingID, err
@@ -137,7 +137,7 @@ func (cs *credentialStore) upsertCredentialByInstance(platform, instanceURL, nam
 	_, err = cs.db.ExecContext(context.Background(), `
 		INSERT INTO smeldr_social_credentials
 			(id, platform, name, instance_url, actor_id, access_token, refresh_token, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		id, platform, name, instanceURL, actorID,
 		encAccess, encRefresh, nullTime(expiresAt),
 		now, now,
@@ -154,7 +154,7 @@ func (cs *credentialStore) getCredential(id string) (PlatformCredential, error) 
 	err := cs.db.QueryRowContext(context.Background(), `
 		SELECT id, platform, name, instance_url, actor_id, access_token, refresh_token,
 		       expires_at, created_at, updated_at
-		FROM smeldr_social_credentials WHERE id=?`, id,
+		FROM smeldr_social_credentials WHERE id=$1`, id,
 	).Scan(
 		&c.ID, &c.Platform, &c.Name, &c.InstanceURL, &c.ActorID,
 		&encAccess, &encRefresh,
@@ -213,11 +213,23 @@ func (cs *credentialStore) listCredentials() ([]PlatformCredential, error) {
 	return out, rows.Err()
 }
 
-// deleteCredential permanently removes a credential row.
-// Returns smeldr.ErrNotFound when no row exists.
+// deleteCredential permanently removes a credential row. A credential that
+// posts still use is refused with smeldr.ErrConflict (409) naming how many:
+// the posts reference it, Postgres enforces that, and deleting it would leave
+// them unable to publish. Delete or move those posts first. Returns
+// smeldr.ErrNotFound when no row exists.
 func (cs *credentialStore) deleteCredential(id string) error {
+	var posts int
+	if err := cs.db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM smeldr_social_posts WHERE credential_id=$1`, id).Scan(&posts); err != nil {
+		return err
+	}
+	if posts > 0 {
+		return fmt.Errorf("%w: credential %s is used by %d post(s); delete them or move them to another credential first",
+			smeldr.ErrConflict, id, posts)
+	}
 	res, err := cs.db.ExecContext(context.Background(),
-		`DELETE FROM smeldr_social_credentials WHERE id=?`, id)
+		`DELETE FROM smeldr_social_credentials WHERE id=$1`, id)
 	if err != nil {
 		return err
 	}

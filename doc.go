@@ -35,4 +35,13 @@
 // Two models are supported, independently per post: an explicit
 // scheduled_at timestamp, or a slot-queue [PublicationSchedule] — recurring
 // weekly slots that publish queued posts FIFO as each slot fires.
+//
+// # Database
+//
+// Tables live in the application's own database and work on SQLite and on
+// Postgres (smeldr.dev/core/pgx). [CreateTables] creates or upgrades them on
+// either. Because Postgres enforces the references between the tables,
+// deleting a post also deletes its delivery log (one transaction), and
+// deleting a credential that posts still use is refused with
+// [smeldr.ErrConflict] (HTTP 409).
 package social

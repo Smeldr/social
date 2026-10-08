@@ -452,8 +452,8 @@ func (m *credentialModule) MCPArchive(_ smeldr.Context, _, _ string) error {
 	return smeldr.ErrBadRequest
 }
 
-// MCPDelete permanently removes the credential.
-// Posts that reference this credential will fail to publish after deletion.
+// MCPDelete permanently removes the credential. A credential that posts still
+// use is refused with a conflict naming how many (see deleteCredential).
 func (m *credentialModule) MCPDelete(_ smeldr.Context, slug string) error {
 	return m.social.creds.deleteCredential(slug)
 }

@@ -3,7 +3,7 @@
 Social post scheduling and AI agent routing for [Forge](https://smeldr.dev) applications.
 
 [![Go Reference](https://pkg.go.dev/badge/smeldr.dev/social.svg)](https://pkg.go.dev/smeldr.dev/social)
-**v0.10.5 — stable.** See [CHANGELOG.md](CHANGELOG.md).
+**v0.11.0 — stable.** See [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 go get smeldr.dev/social@latest
@@ -18,6 +18,17 @@ changed — only the package qualifier. The MCP wiring helper moved with mcp v1.
 (`forgemcp` → `mcp`). The `forge_social_*` DB tables are unchanged.
 
 ---
+
+## Database
+
+smeldr.dev/social keeps its tables in the application's own database (`smeldr.Config.DB`) and runs on SQLite and on Postgres (`smeldr.dev/core/pgx`, from v0.11.0). `CreateTables` creates or upgrades them on either: every query uses numbered placeholders, the time columns are `TIMESTAMP`, columns added in later releases are added with `smeldr.EnsureColumn`, and legacy `forge_social_*` tables are renamed with `smeldr.RenameLegacyTables`.
+
+Postgres enforces the references between the tables, so:
+
+- deleting a post also deletes its delivery log, in one transaction;
+- deleting a credential that posts still use is refused with a conflict (HTTP 409) that says how many posts use it. Delete those posts, or move them to another credential, first. On SQLite this used to succeed and leave the posts pointing at a missing credential.
+
+The `github.com/jackc/pgx/v5` requirement in `go.mod` is for the Postgres integration tests only (build tag `integration`, `DATABASE_URL`); the module's own code imports no database driver.
 
 ## What it does
 
@@ -256,7 +267,7 @@ func verifySignature(body []byte, secret []byte, header string) bool {
 
 2xx = delivered. 4xx (non-429) = terminal (no retry). 429 = honour `Retry-After`. 5xx/network = transient retry.
 
-Jobs survive restarts — persisted in SQLite.
+Jobs survive restarts: they are persisted in the application database.
 
 ---
 

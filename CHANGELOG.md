@@ -1,5 +1,23 @@
 # smeldr.dev/social Changelog
 
+## [0.11.0] - 2026-10-08
+
+### Added
+
+- **Postgres support** (A450). smeldr.dev/social now runs on an application database on Postgres (smeldr.dev/core/pgx), not only SQLite: every query uses numbered placeholders (`$1`; the status `IN (...)` list too), the time columns are `TIMESTAMP` (Postgres has no `DATETIME`), the `actor_id` and `code_verifier` columns are added with `smeldr.EnsureColumn` (the old `ALTER TABLE` recognised only SQLite's "duplicate column name" and failed on every Postgres boot), and the legacy `forge_social_*` renames use `smeldr.RenameLegacyTables` (they used to return early on anything but SQLite). Integration tests against postgres:16 run in CI.
+
+### Changed (behaviour, read this first)
+
+- **Deleting a credential that posts still use is refused** with a conflict (HTTP 409, an MCP tool error) naming how many posts use it. Before, on SQLite, it succeeded and left those posts pointing at a missing credential, unable to publish; on Postgres the database refuses it anyway. Delete or move the posts first.
+- **Deleting a post also deletes its delivery log**, in one transaction. Before, on SQLite, the log rows stayed behind; on Postgres the delete failed.
+- A guard test fails the build on SQLite-only SQL (`?` placeholders, `sqlite_master`, `DATETIME`, the "duplicate column name" text, and the rest of core's list).
+
+### Upgrading
+
+- Requires smeldr.dev/core v1.136.0 (`RenameLegacyTables`; `EnsureColumn` on Postgres needs v1.118.0 or later). Existing SQLite databases keep their `DATETIME` declarations; SQLite treats both types alike. The `github.com/jackc/pgx/v5` require is for the integration tests only.
+
+---
+
 ## [0.10.5] — 2026-09-19
 
 ### Added

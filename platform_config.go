@@ -100,7 +100,7 @@ func (s *platformConfigStore) save(platform string, cfg PlatformConfig) error {
 	}
 	_, err = s.db.ExecContext(context.Background(), `
 		INSERT INTO smeldr_social_platform_config (platform, config, updated_at)
-		VALUES (?, ?, ?)
+		VALUES ($1, $2, $3)
 		ON CONFLICT(platform) DO UPDATE SET config=excluded.config, updated_at=excluded.updated_at`,
 		platform, enc, time.Now().UTC(),
 	)
@@ -112,7 +112,7 @@ func (s *platformConfigStore) save(platform string, cfg PlatformConfig) error {
 func (s *platformConfigStore) load(platform string) (PlatformConfig, bool, error) {
 	var enc string
 	err := s.db.QueryRowContext(context.Background(),
-		`SELECT config FROM smeldr_social_platform_config WHERE platform=?`, platform,
+		`SELECT config FROM smeldr_social_platform_config WHERE platform=$1`, platform,
 	).Scan(&enc)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlatformConfig{}, false, nil
