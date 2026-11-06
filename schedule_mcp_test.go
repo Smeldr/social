@@ -6,6 +6,7 @@ package social
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,6 +98,32 @@ func TestScheduleModule_MCPCreate(t *testing.T) {
 		})
 		if err == nil {
 			t.Fatal("expected error")
+		}
+		// With no schedule to find, the insert's own error comes back (T1150).
+		if errors.Is(err, smeldr.ErrConflict) {
+			t.Errorf("err = %v; a failed insert with no existing schedule is not a conflict", err)
+		}
+	})
+
+	// A second schedule for one credential is a conflict that names the
+	// existing schedule and the tool to change it, not an internal error
+	// (T1150).
+	t.Run("second schedule for a credential conflicts", func(t *testing.T) {
+		s, _ := newScheduleTestSocial(t)
+		sm := s.ScheduleModule()
+		first, err := sm.MCPCreate(ctx, map[string]any{"credential_id": "cred-dup", "slots": validSlotsJSON})
+		if err != nil {
+			t.Fatalf("first MCPCreate: %v", err)
+		}
+		_, err = sm.MCPCreate(ctx, map[string]any{"credential_id": "cred-dup", "slots": validSlotsJSON})
+		if !errors.Is(err, smeldr.ErrConflict) {
+			t.Fatalf("err = %v; want smeldr.ErrConflict", err)
+		}
+		id := first.(PublicationSchedule).ID
+		for _, want := range []string{"cred-dup", id, "update_publication_schedule"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %q; want it to name %q", err, want)
+			}
 		}
 	})
 

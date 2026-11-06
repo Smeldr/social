@@ -1,6 +1,7 @@
 package social
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -8,7 +9,9 @@ import (
 )
 
 // configModule implements [smeldr.MCPModule] for platform configuration.
-// It exposes a single write tool: create_platform_config (Admin role).
+// create_platform_config (Admin role) stores a platform's config;
+// list_platform_configs and get_platform_config read it back without the
+// client secret.
 // Obtain it via [Social.ConfigModule].
 type configModule struct {
 	social *Social
@@ -79,14 +82,31 @@ func (m *configModule) MCPSchema() []smeldr.MCPField {
 	}
 }
 
-// MCPList is not supported — platform config is write-only via MCP.
+// MCPList returns one [PlatformConfigSummary] per configured platform,
+// without the client secret (T1150).
 func (m *configModule) MCPList(_ smeldr.Context, _ ...smeldr.Status) ([]any, error) {
-	return nil, smeldr.ErrBadRequest
+	sums, err := m.social.platformCfgs.summaries("")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]any, len(sums))
+	for i, sum := range sums {
+		out[i] = sum
+	}
+	return out, nil
 }
 
-// MCPGet is not supported — platform config is write-only via MCP.
-func (m *configModule) MCPGet(_ smeldr.Context, _ string) (any, error) {
-	return nil, smeldr.ErrBadRequest
+// MCPGet returns the [PlatformConfigSummary] for the platform named by slug,
+// or smeldr.ErrNotFound when it is not configured.
+func (m *configModule) MCPGet(_ smeldr.Context, slug string) (any, error) {
+	sums, err := m.social.platformCfgs.summaries(slug)
+	if err != nil {
+		return nil, err
+	}
+	if len(sums) == 0 {
+		return nil, smeldr.ErrNotFound
+	}
+	return sums[0], nil
 }
 
 // MCPCreate stores the OAuth 2.0 app credentials for a platform.
@@ -153,25 +173,32 @@ func (m *configModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any, 
 
 // MCPUpdate is not supported.
 func (m *configModule) MCPUpdate(_ smeldr.Context, _ string, _ map[string]any) (any, error) {
-	return nil, smeldr.ErrBadRequest
+	return nil, unsupportedConfigOp("update")
 }
 
 // MCPPublish is not supported.
 func (m *configModule) MCPPublish(_ smeldr.Context, _, _ string) error {
-	return smeldr.ErrBadRequest
+	return unsupportedConfigOp("publish")
 }
 
 // MCPSchedule is not supported.
 func (m *configModule) MCPSchedule(_ smeldr.Context, _ string, _ time.Time, _ string) error {
-	return smeldr.ErrBadRequest
+	return unsupportedConfigOp("schedule")
 }
 
 // MCPArchive is not supported.
 func (m *configModule) MCPArchive(_ smeldr.Context, _, _ string) error {
-	return smeldr.ErrBadRequest
+	return unsupportedConfigOp("archive")
 }
 
 // MCPDelete is not supported.
 func (m *configModule) MCPDelete(_ smeldr.Context, _ string) error {
-	return smeldr.ErrBadRequest
+	return unsupportedConfigOp("delete")
+}
+
+// unsupportedConfigOp is the refusal for a platform config tool that has no
+// meaning here, with the reason and what to do instead (T1150).
+func unsupportedConfigOp(op string) error {
+	return fmt.Errorf("%w: platform config has no %s; call create_platform_config again to replace it",
+		smeldr.ErrBadRequest, op)
 }

@@ -1,5 +1,19 @@
 # smeldr.dev/social Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A second `create_publication_schedule` for a credential that already has one is a conflict (T1150).** Before, it failed with MCP error -32603 "internal error: UNIQUE constraint failed". It now returns an MCP tool error (-32001) that names the credential and the existing schedule, and says to change it with `update_publication_schedule`. The behaviour is the same on SQLite and Postgres.
+- **`list_platform_configs` and `get_platform_config` return the stored config (T1150).** Both answered "Bad request" before. They now return `platform`, `client_id`, `client_secret_set`, `redirect_url`, `instance_url`, `success_url`, `scopes` and `updated_at`. The client secret is never returned. A stored config that cannot be decrypted, for example after the application secret changed, is listed with an `error` field. The other platform config tools still refuse, but now say why and point to `create_platform_config`, which replaces a platform's config when called again.
+- **The README describes the module and its body limits correctly (T1150).** The module is for Smeldr applications, and the README said Forge. X refuses a body over 280 characters. LinkedIn truncates a body over 3000 characters to 3000, where the README said it refused. Mastodon has no local limit, because the instance enforces its own.
+
+### Deprecated
+
+- **Agent route deliveries send `X-Smeldr-Signature` (T1150).** The header carries `sha256=<HMAC>` and is the one to verify. `X-Forge-Signature` carries the same value, is deprecated, and is sent until 2027-02-06, then removed. Receivers that verify `X-Forge-Signature` should switch to `X-Smeldr-Signature`. This follows D97, since a delivery header is part of the stability contract and goes through a deprecation window.
+
+---
+
 ## [0.11.0] - 2026-10-08
 
 ### Added

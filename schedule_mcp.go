@@ -113,7 +113,7 @@ func (m *scheduleModule) MCPCreate(_ smeldr.Context, fields map[string]any) (any
 		UpdatedAt:    now,
 	}
 	if err := insertSchedule(m.social.db, s); err != nil {
-		return nil, err
+		return nil, scheduleInsertError(m.social.db, credentialID, err)
 	}
 	return s, nil
 }

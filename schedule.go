@@ -91,6 +91,23 @@ func updateScheduleLastTick(db smeldr.DB, id string, t time.Time) error {
 	return err
 }
 
+// scheduleInsertError explains a failed insert for credentialID: a
+// credential has at most one publication schedule (UNIQUE credential_id), so
+// when one exists the failure is a smeldr.ErrConflict that names it and the
+// tool to change it (T1150). Looking after the insert failed, not before,
+// covers two concurrent creates with the same path and needs no driver's
+// error text. Any other failure is returned as it came.
+func scheduleInsertError(db smeldr.DB, credentialID string, insertErr error) error {
+	var id string
+	err := db.QueryRowContext(context.Background(),
+		`SELECT id FROM smeldr_social_publication_schedules WHERE credential_id=$1`, credentialID).Scan(&id)
+	if err != nil {
+		return insertErr
+	}
+	return fmt.Errorf("%w: credential %s already has publication schedule %s; change it with update_publication_schedule",
+		smeldr.ErrConflict, credentialID, id)
+}
+
 func getSchedule(db smeldr.DB, id string) (PublicationSchedule, error) {
 	return scanSchedule(db.QueryRowContext(context.Background(), `
 		SELECT id, credential_id, slots, status, last_tick_at, created_at, updated_at

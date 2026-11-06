@@ -1,6 +1,6 @@
 # smeldr.dev/social
 
-Social post scheduling and AI agent routing for [Forge](https://smeldr.dev) applications.
+Social post scheduling and AI agent routing for [Smeldr](https://smeldr.dev) applications.
 
 [![Go Reference](https://pkg.go.dev/badge/smeldr.dev/social.svg)](https://pkg.go.dev/smeldr.dev/social)
 **v0.11.0 — stable.** See [CHANGELOG.md](CHANGELOG.md).
@@ -59,7 +59,7 @@ defer svc.Stop()    // drain scheduler + delivery worker on shutdown
 mcpSrv := mcp.New(app,
     mcp.WithModule(svc.PostModule()),
     mcp.WithModule(svc.CredentialModule()),
-    mcp.WithModule(svc.ConfigModule()),     // create_platform_config (Admin)
+    mcp.WithModule(svc.ConfigModule()),     // create_platform_config (Admin); list/get_platform_config(s), no secret (Editor)
     mcp.WithModule(svc.ScheduleModule()),   // slot-queue (v0.4.0+)
 )
 
@@ -69,7 +69,7 @@ svc.AddRoutes(app,
 )
 ```
 
-Platform credentials are stored in the database — no environment variables required after initial setup. Call `create_platform_config` via MCP (Admin role) to configure each platform.
+Platform credentials are stored in the database: no environment variables are required after initial setup. Call `create_platform_config` via MCP (Admin role) to configure each platform; calling it again replaces that platform's config. `list_platform_configs` and `get_platform_config <platform>` read back what is stored (client ID, redirect and instance URLs, scopes, `updated_at`, `client_secret_set`), never the client secret.
 
 > **Backwards compat:** `Config.Mastodon` and `Config.LinkedIn` are still accepted as fallbacks but are deprecated. A warning is logged at startup when env-var config is present and no DB config exists for that platform.
 
@@ -88,7 +88,7 @@ draft → scheduled → published
 Create a post via MCP tool `create_scheduled_post`, set `scheduled_at`, and the scheduler handles the rest. Call `publish_scheduled_post` to publish immediately without waiting.
 
 **Platforms:** `mastodon` (default), `linkedin`, or `x`.  
-**Body limits:** Mastodon 500 characters; LinkedIn 3000 characters; X 280 characters (returns terminal error if exceeded — not truncated).  
+**Body limits:** X: 280 characters; a longer body is refused with a terminal error, not truncated. LinkedIn: a body over 3000 characters is truncated to 3000. Mastodon: no local limit; the instance enforces its own (500 on mastodon.social by default), and its refusal comes back as a failed publish.  
 **Media:** Set `media_url` to attach an HTTPS image URL (Mastodon and LinkedIn only; X media is not yet supported).
 
 ---
@@ -116,7 +116,7 @@ Slot format:
 - `time`: HH:MM in 24-hour format
 - `timezone`: IANA timezone name (e.g. `"Europe/Copenhagen"`, `"America/New_York"`)
 
-Each credential may have at most one schedule.
+Each credential may have at most one schedule. A second `create_publication_schedule` for the same credential is refused with a conflict that names the existing schedule; change that one with `update_publication_schedule`.
 
 ### Queue a post
 
@@ -244,7 +244,9 @@ svc.AddRoutes(app,
 
 ### Signature verification
 
-Every POST includes `X-Forge-Signature: sha256=<HMAC-SHA256 of body, key=Config.Secret>`.
+Every POST includes `X-Smeldr-Signature: sha256=<HMAC-SHA256 of body, key=Config.Secret>`. Verify that header.
+
+`X-Forge-Signature`, the old name, carries the same value and is **deprecated**: it is sent until 2027-02-06 and then removed. A receiver that verifies `X-Forge-Signature` should switch to `X-Smeldr-Signature`.
 
 ```go
 func verifySignature(body []byte, secret []byte, header string) bool {

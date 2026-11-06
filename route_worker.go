@@ -80,6 +80,9 @@ func (r *Router) deliver(hc *http.Client, j routeJob) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// X-Smeldr-Signature is the header to verify. X-Forge-Signature carries
+	// the same value and is deprecated, sent until 2027-02-06 (D97, T1150).
+	req.Header.Set("X-Smeldr-Signature", "sha256="+sig)
 	req.Header.Set("X-Forge-Signature", "sha256="+sig)
 
 	resp, err := hc.Do(req)

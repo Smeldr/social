@@ -128,6 +128,14 @@ func TestPG_SocialStores(t *testing.T) {
 	if err := insertSchedule(db, s); err != nil {
 		t.Fatalf("insertSchedule: %v", err)
 	}
+	// A second schedule for the credential is a conflict naming s1 (T1150).
+	dup := s
+	dup.ID = "s2"
+	if err := insertSchedule(db, dup); err == nil {
+		t.Fatal("second insertSchedule for one credential succeeded")
+	} else if cerr := scheduleInsertError(db, credID, err); !errors.Is(cerr, smeldr.ErrConflict) || !strings.Contains(cerr.Error(), "s1") {
+		t.Fatalf("scheduleInsertError = %v; want a conflict naming s1", cerr)
+	}
 	s.Status = ScheduleStatusPaused
 	if err := updateSchedule(db, s); err != nil {
 		t.Fatal(err)
@@ -171,6 +179,9 @@ func TestPG_SocialStores(t *testing.T) {
 	}
 	if cfg, ok, err := pcs.load("mastodon"); err != nil || !ok || cfg.ClientID != "b" {
 		t.Fatalf("load = %+v %v %v", cfg, ok, err)
+	}
+	if sums, err := pcs.summaries(""); err != nil || len(sums) != 1 || sums[0].ClientID != "b" || sums[0].UpdatedAt.IsZero() {
+		t.Fatalf("summaries = %+v, %v", sums, err)
 	}
 
 	// Route jobs.

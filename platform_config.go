@@ -130,3 +130,66 @@ func (s *platformConfigStore) load(platform string) (PlatformConfig, bool, error
 	}
 	return cfg, true, nil
 }
+
+// PlatformConfigSummary is what list_platform_configs and
+// get_platform_config return for one platform: the stored config without
+// its client secret, which is never returned (T1150).
+type PlatformConfigSummary struct {
+	Platform        string    `json:"platform"`
+	ClientID        string    `json:"client_id"`
+	ClientSecretSet bool      `json:"client_secret_set"`
+	RedirectURL     string    `json:"redirect_url"`
+	InstanceURL     string    `json:"instance_url"`
+	SuccessURL      string    `json:"success_url"`
+	Scopes          []string  `json:"scopes"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	// Error is set when the stored config cannot be read, for example after
+	// the application secret changed; the other fields are then empty.
+	Error string `json:"error,omitempty"`
+}
+
+// GetSlug returns the platform, the identifier get_platform_config takes.
+func (p PlatformConfigSummary) GetSlug() string { return p.Platform }
+
+// summaries returns one summary per stored platform config, ordered by
+// platform, or only platform's when it is not empty. A row that does not
+// decrypt is listed with Error set rather than failing the whole list.
+func (s *platformConfigStore) summaries(platform string) ([]PlatformConfigSummary, error) {
+	q := `SELECT platform, config, updated_at FROM smeldr_social_platform_config`
+	var args []any
+	if platform != "" {
+		q += ` WHERE platform=$1`
+		args = append(args, platform)
+	}
+	rows, err := s.db.QueryContext(context.Background(), q+` ORDER BY platform`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PlatformConfigSummary
+	for rows.Next() {
+		var sum PlatformConfigSummary
+		var enc string
+		if err := rows.Scan(&sum.Platform, &enc, &sum.UpdatedAt); err != nil {
+			return nil, err
+		}
+		sum.UpdatedAt = sum.UpdatedAt.UTC()
+		var cfg PlatformConfig
+		plain, err := s.decrypt(enc)
+		if err == nil {
+			err = json.Unmarshal(plain, &cfg)
+		}
+		if err != nil {
+			sum.Error = "cannot decrypt; configure it again with create_platform_config"
+		} else {
+			sum.ClientID = cfg.ClientID
+			sum.ClientSecretSet = cfg.ClientSecret != ""
+			sum.RedirectURL = cfg.RedirectURL
+			sum.InstanceURL = cfg.InstanceURL
+			sum.SuccessURL = cfg.SuccessURL
+			sum.Scopes = cfg.Scopes
+		}
+		out = append(out, sum)
+	}
+	return out, rows.Err()
+}

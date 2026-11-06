@@ -120,9 +120,9 @@ func TestRouteWorker_Retries5xx(t *testing.T) {
 }
 
 func TestRouteWorker_SignatureHeader(t *testing.T) {
-	sigReceived := make(chan string, 1)
+	sigReceived := make(chan [2]string, 1)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sigReceived <- r.Header.Get("X-Forge-Signature")
+		sigReceived <- [2]string{r.Header.Get("X-Smeldr-Signature"), r.Header.Get("X-Forge-Signature")}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -137,9 +137,14 @@ func TestRouteWorker_SignatureHeader(t *testing.T) {
 	social.RunDeliveryForTest(db, secret, srv.Client())
 
 	select {
-	case sig := <-sigReceived:
+	case got := <-sigReceived:
+		sig, old := got[0], got[1]
 		if len(sig) < 10 || sig[:7] != "sha256=" {
-			t.Errorf("X-Forge-Signature = %q; want sha256=...", sig)
+			t.Errorf("X-Smeldr-Signature = %q; want sha256=...", sig)
+		}
+		// The deprecated header carries the same value (D97, T1150).
+		if old != sig {
+			t.Errorf("X-Forge-Signature = %q; want %q", old, sig)
 		}
 	case <-time.After(3 * time.Second):
 		t.Error("agent did not receive POST within 3s")
