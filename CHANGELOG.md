@@ -1,5 +1,13 @@
 # smeldr.dev/social Changelog
 
+## [Unreleased]
+
+### Security
+
+- **`smeldr.dev/social` now builds with Go 1.26.11, which fixes a net/http vulnerability (T1197).** govulncheck reported GO-2026-6859 in the standard library's net/http for this module. The toolchain line in go.mod now names go1.26.11 instead of go1.26.10, so this module's own build and tests use it. The `go 1.26.5` line is unchanged: a Go command older than go1.26.11 fetches go1.26.11 by itself, unless `GOTOOLCHAIN=local` is set, and then Go 1.26.5 or later still builds it. A program that imports this module builds with its own toolchain. There is no code change.
+
+---
+
 ## [0.11.1] - 2026-11-06
 
 ### Fixed
