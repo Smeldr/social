@@ -1,0 +1,3 @@
+
+# Test coverage profiles (ci.yml runs go test -coverprofile=coverage.out)
+coverage.out
